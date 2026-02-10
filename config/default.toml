@@ -1,0 +1,15 @@
+[server]
+port = 8080
+
+[database]
+url = "postgres://altis:password@localhost:5432/altis"
+
+[redis]
+url = "redis://localhost:6379"
+
+[kafka]
+brokers = "localhost:9092"
+
+[auth]
+jwt_secret = "super-secret-key-change-me"
+jwt_expiration_seconds = 86400 # 24 hours

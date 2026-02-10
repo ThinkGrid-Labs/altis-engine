@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "altis-api",
+    "altis-domain",
+    "altis-infra",
+    "altis-proto",
+]
+resolver = "2"
