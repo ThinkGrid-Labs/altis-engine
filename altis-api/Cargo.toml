@@ -8,11 +8,13 @@ altis-domain = { path = "../altis-domain" }
 altis-infra = { path = "../altis-infra" }
 altis-proto = { path = "../altis-proto" }
 tokio = { version = "1.0", features = ["full"] }
-warp = "0.3" # Or axum, let's stick to user pref or standard
+axum = { version = "0.7", features = ["macros"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1"

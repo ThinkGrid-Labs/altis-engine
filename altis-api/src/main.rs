@@ -1,9 +1,20 @@
 use std::sync::Arc;
-use warp::Filter;
+use axum::{
+    routing::get,
+    Router,
+    http::{Method, HeaderValue},
+};
+use tower_http::cors::CorsLayer;
+use std::net::SocketAddr;
+use crate::state::AppState;
 
 mod holds;
 mod bookings;
 mod auth;
+mod state;
+mod search;
+mod worker;
+mod summary_handler;
 
 #[tokio::main]
 async fn main() {
@@ -20,15 +31,17 @@ async fn main() {
 
     // Redis Connection
     let redis_client = altis_infra::RedisClient::new(&config.redis.url).await.expect("Failed to connect to Redis");
+    let redis_arc = Arc::new(redis_client.clone());
     
     // Kafka Connection
     let kafka_producer = altis_infra::EventProducer::new(&config.kafka.brokers).expect("Failed to create Kafka producer");
+    let kafka_arc = Arc::new(kafka_producer);
 
     // SSE Broadcast Channel
     let (sse_tx, _) = tokio::sync::broadcast::channel(100);
 
     // Load Dynamic Business Rules
-    let dynamic_rules = match db_client.fetch_business_rules(config.business_rules.clone()).await {
+    let dynamic_rules = match db_arc.fetch_business_rules(config.business_rules.clone()).await {
         Ok(rules) => {
             tracing::info!("Loaded dynamic business rules from DB");
             rules
@@ -39,80 +52,66 @@ async fn main() {
         }
     };
 
-    let holds_state = holds::AppState {
-        redis: Arc::new(redis_client.clone()),
-        kafka: Arc::new(kafka_producer.clone()),
-        sse_tx,
+    let app_state = AppState {
+        db: db_arc.clone(),
+        redis: redis_arc.clone(),
+        kafka: kafka_arc.clone(),
+        sse_tx: sse_tx.clone(),
         jwt_secret: config.auth.jwt_secret.clone(),
+        jwt_expiration: config.auth.jwt_expiration_seconds,
         business_rules: dynamic_rules.clone(),
     };
 
-    let bookings_state = bookings::AppState {
-        redis: Arc::new(redis_client),
-        db: db_arc,
-        kafka: Arc::new(kafka_producer),
-        jwt_secret: config.auth.jwt_secret.clone(),
-    };
-
-mod auth;
-mod search;
-mod worker;
-mod summary_handler;
-
     // Start Availability Worker (Background Task)
     let db_for_worker = db_arc.clone();
-    let redis_for_worker = Arc::new(redis_client.clone());
+    let redis_for_worker = redis_arc.clone();
     let brokers = config.kafka.brokers.clone();
     
     tokio::spawn(async move {
         worker::start_availability_worker(brokers, "altis-worker-group".to_string(), db_for_worker, redis_for_worker).await;
     });
 
-    // 5. Security Middlewares
-    // CORS
-    let cors = warp::cors()
-        .allow_any_origin() // For development. Production should verify origin.
-        .allow_headers(vec!["User-Agent", "Content-Type", "Authorization"])
-        .allow_methods(vec!["GET", "POST", "DELETE", "OPTIONS"]);
+    // CORS Middleware
+    let cors = CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_headers([
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::USER_AGENT,
+        ]);
 
-    // Rate Limiter Filter (Middleware)
-    // Uses Redis to track request counts.
-    // Key: "ratelimit:<ip>" (Mock IP for now or x-forwarded-for)
-    let redis_filter = warp::any().map(move || redis_client.clone());
-    
-    let rate_limit = warp::any()
-        .and(redis_filter)
-        .and(warp::addr::remote()) // Get IP
-        .and_then(|r: altis_infra::RedisClient, addr: Option<std::net::SocketAddr>| async move {
-            let ip = addr.map(|a| a.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
-            let key = format!("ratelimit:{}", ip);
-            // Limit: 100 requests per 60 seconds
-            match r.check_rate_limit(&key, 100, 60).await {
-                Ok(allowed) => {
-                    if allowed {
-                        Ok(())
-                    } else {
-                        Err(warp::reject::custom(RateLimitExceeded))
-                    }
-                },
-                Err(_) => Ok(()) // Fail open if Redis error
-            }
-        }).untuple_one();
-
-    // Combine Routes
-    let routes = auth::routes(config.auth.jwt_secret.clone(), config.auth.jwt_expiration_seconds)
-        .or(holds::routes(holds_state))
-        .or(bookings::routes(bookings_state))
-        .or(search::routes(search::AppState { db: db_arc.clone(), redis: Arc::new(redis_client_for_search) }))
-        .with(cors)
-        .and(rate_limit); // Apply Rate Limit to ALL routes
+    // Build Router
+    let app = Router::new()
+        .merge(auth::routes())
+        .merge(holds::routes())
+        .merge(bookings::routes())
+        .merge(search::routes())
+        .route("/v1/trips/:trip_id/summary", get(summary_handler::get_trip_summary))
+        .layer(cors)
+        .layer(axum::middleware::from_fn_with_state(app_state.clone(), rate_limit_middleware))
+        .with_state(app_state);
 
     // Start Server
-    warp::serve(routes)
-        .run(([0, 0, 0, 0], config.server.port))
-        .await;
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
+    println!("Listening on {}", addr);
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    
+    axum::serve(listener, app).await.unwrap();
 }
 
-#[derive(Debug)]
-struct RateLimitExceeded;
-impl warp::reject::Reject for RateLimitExceeded {}
+async fn rate_limit_middleware(
+    State(state): State<AppState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+    let ip = addr.ip().to_string();
+    let key = format!("ratelimit:{}", ip);
+    
+    match state.redis.check_rate_limit(&key, 100, 60).await {
+        Ok(true) => Ok(next.run(req).await),
+        Ok(false) => Err((axum::http::StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded")),
+        Err(_) => Ok(next.run(req).await), // Fail open
+    }
+}

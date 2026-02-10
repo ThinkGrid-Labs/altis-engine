@@ -1,7 +1,9 @@
 # Builder stage
-FROM rust:1.76-slim-bullseye AS builder
+FROM rust:latest AS builder
 
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y cmake build-essential && rm -rf /var/lib/apt/lists/*
 
 # Copy the entire workspace
 COPY . .
