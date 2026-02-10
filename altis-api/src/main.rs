@@ -68,11 +68,51 @@ mod summary_handler;
         worker::start_availability_worker(brokers, "altis-worker-group".to_string(), db_for_worker, redis_for_worker).await;
     });
 
-    // Routes
-    let routes = holds::routes(holds_state)
-        .or(bookings::routes(bookings_state))
-        .or(auth::routes(config.auth.jwt_secret, config.auth.jwt_expiration_seconds))
-        .or(search::routes(search::AppState { db: db_arc.clone(), redis: Arc::new(redis_client) })); // Pass Redis to Search
+    // 5. Security Middlewares
+    // CORS
+    let cors = warp::cors()
+        .allow_any_origin() // For development. Production should verify origin.
+        .allow_headers(vec!["User-Agent", "Content-Type", "Authorization"])
+        .allow_methods(vec!["GET", "POST", "DELETE", "OPTIONS"]);
 
-    warp::serve(routes).run(([0, 0, 0, 0], config.server.port)).await;
+    // Rate Limiter Filter (Middleware)
+    // Uses Redis to track request counts.
+    // Key: "ratelimit:<ip>" (Mock IP for now or x-forwarded-for)
+    let redis_filter = warp::any().map(move || redis_client.clone());
+    
+    let rate_limit = warp::any()
+        .and(redis_filter)
+        .and(warp::addr::remote()) // Get IP
+        .and_then(|r: altis_infra::RedisClient, addr: Option<std::net::SocketAddr>| async move {
+            let ip = addr.map(|a| a.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
+            let key = format!("ratelimit:{}", ip);
+            // Limit: 100 requests per 60 seconds
+            match r.check_rate_limit(&key, 100, 60).await {
+                Ok(allowed) => {
+                    if allowed {
+                        Ok(())
+                    } else {
+                        Err(warp::reject::custom(RateLimitExceeded))
+                    }
+                },
+                Err(_) => Ok(()) // Fail open if Redis error
+            }
+        }).untuple_one();
+
+    // Combine Routes
+    let routes = auth::routes(config.auth.jwt_secret.clone(), config.auth.jwt_expiration_seconds)
+        .or(holds::routes(holds_state))
+        .or(bookings::routes(bookings_state))
+        .or(search::routes(search::AppState { db: db_arc.clone(), redis: Arc::new(redis_client_for_search) }))
+        .with(cors)
+        .and(rate_limit); // Apply Rate Limit to ALL routes
+
+    // Start Server
+    warp::serve(routes)
+        .run(([0, 0, 0, 0], config.server.port))
+        .await;
 }
+
+#[derive(Debug)]
+struct RateLimitExceeded;
+impl warp::reject::Reject for RateLimitExceeded {}

@@ -11,7 +11,8 @@ It features a Hexagonal Architecture, Real-Time Availability Index (CQRS), and a
 
 ## Architecture Highlights
 - **CQRS**: Search reads from Redis (sub-ms), Bookings write to Postgres.
-- **Flexible Pricing Engine**: Time-limited sales, percentage discounts, and fixed surcharges configurable via `default.toml`.
+- **Flexible Pricing Engine**: Time-limited sales, percentage discounts, and fixed surcharges configurable via `default.toml` or DB.
+- **Security**: Distributed Rate Limiting (Redis), CORS, and Secure Headers.
 - **Stateful Sessions**: Redis Hashes store Trip state (Passengers, Ancillaries) incrementally.
 - **Atomic Availability**: Redis `DECR` operations ensure consistency under high concurrency.
 - **Dual-Stage Holds**: 
