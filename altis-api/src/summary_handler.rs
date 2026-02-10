@@ -25,16 +25,18 @@ struct CostBreakdown {
     passengers: usize,
 }
 
+use crate::error::AppError;
+
 pub async fn get_trip_summary(
     State(state): State<AppState>,
     Path(trip_id): Path<Uuid>
-) -> impl IntoResponse {
+) -> Result<Json<TripSummaryResponse>, AppError> {
     // 1. Get Session Data
     let owner_opt = state.redis.hget_trip_field(&trip_id.to_string(), "owner").await.ok().flatten();
     
     let _owner_id = match owner_opt {
         Some(v) => v,
-        None => return (StatusCode::NOT_FOUND, "Trip not found").into_response(),
+        None => return Err(AppError::NotFoundError("Trip not found".to_string())),
     };
     
     // Auth check skipped for MVP refactor, should extract Claims from request extensions
@@ -43,7 +45,7 @@ pub async fn get_trip_summary(
     let flights_opt = state.redis.hget_trip_field(&trip_id.to_string(), "flights").await.ok().flatten();
     let flight_ids_str = match flights_opt {
         Some(s) => s,
-        None => return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid Trip Data").into_response(),
+        None => return Err(AppError::InternalServerError("Invalid Trip Data".to_string())),
     };
     let flight_ids: Vec<&str> = flight_ids_str.split(',').collect();
 
@@ -92,7 +94,7 @@ pub async fn get_trip_summary(
 
     let total = final_base_fare + taxes + fees + seats_cost;
 
-    Json(TripSummaryResponse {
+    Ok(Json(TripSummaryResponse {
         trip_id,
         breakdown: CostBreakdown {
             base_fare: final_base_fare,
@@ -103,5 +105,5 @@ pub async fn get_trip_summary(
         },
         total_amount: total,
         currency: "USD".to_string(),
-    }).into_response()
+    }))
 }

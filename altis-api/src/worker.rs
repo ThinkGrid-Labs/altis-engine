@@ -73,35 +73,19 @@ async fn update_availability(db: &DbClient, redis: &RedisClient, booking_id: Uui
         
         // 2. Atomic Decrement (Optimistic)
         // If the key exists (hot cache), this is O(1).
-        let new_val: Option<i64> = redis.decr_flight_availability(&flight_id.to_string()).await.ok();
-        
-        if let Some(val) = new_val {
-             info!("Decremented availability for flight {}: {}", flight_id, val);
-        } else {
-             // Cache Miss or Error?
-             // If DECR returned success (even if negative), we are good?
-             // Actually, if key didn't exist, Redis DECR makes it -1.
-             // We should check if it was < 0 (unseeded) and seed it.
-             // Or simpler: Just rely on Search seeding it.
-             // If Search seeds it, it uses `(Capacity - Count)`.
-             // `Count` includes this new booking.
-             // So if we DECR an empty key to -1, then Search Seeds it to (Capacity - Count),
-             // the -1 is overwritten.
-             // But if we DECR an EXISTING key, we are correct.
-             // The only race is: Search reads (Capacity - Count), puts X. 
-             // We DECR to Y.
-             // If we DECR non-existent key, we get -1. This is useless state.
-             // We should delete the key if it goes negative to force re-seed?
-             // "Invalidate Cache" pattern.
-             
-             // Enterprise Pattern: Cache Invalidation.
-             // Instead of DECR, just DEL key.
-             // Next Search will re-calculate (Capacity - Count) accurately.
-             // This is 100% consistent and safe.
-             
-             let _ = redis.client.get_async_connection().await?.del::<_, ()>(key).await;
-             info!("Invalidated cache for flight {}", flight_id);
+        // 2. Atomic Decrement (Optimistic)
+        match redis.decr_flight_availability(&flight_id.to_string()).await {
+             Ok(Some(new_val)) => {
+                 info!("Decremented availability for flight {}: {}", flight_id, new_val);
+             },
+             Ok(None) => {
+                 info!("Cache miss for flight {}, skipping decrement (will be seeded on next Search)", flight_id);
+             },
+             Err(e) => {
+                 error!("Failed to decrement flight availability: {}", e);
+             }
         }
+
     }
     
     Ok(())

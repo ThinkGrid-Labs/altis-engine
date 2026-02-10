@@ -3,15 +3,26 @@ use uuid::Uuid;
 use altis_domain::search::{FlightOption, SearchLeg};
 use chrono::{NaiveDate, Utc};
 
-pub struct FlightRepository;
+use sqlx::Postgres;
+use uuid::Uuid;
+use altis_domain::search::{FlightOption, SearchLeg};
+use altis_domain::repository::FlightRepository;
+use chrono::{NaiveDate, Utc};
+use async_trait::async_trait;
+use std::error::Error;
 
-impl FlightRepository {
-    pub async fn search_flights(
-        pool: &sqlx::PgPool,
-        redis: &crate::RedisClient,
+pub struct PostgresFlightRepository {
+    pub pool: sqlx::PgPool,
+    pub redis: crate::RedisClient,
+}
+
+#[async_trait]
+impl FlightRepository for PostgresFlightRepository {
+    async fn search_flights(
+        &self,
         leg: &SearchLeg,
         min_seats: u32,
-    ) -> Result<Vec<FlightOption>, sqlx::Error> {
+    ) -> Result<Vec<FlightOption>, Box<dyn Error + Send + Sync>> {
         // 1. Get Flights Candidates (No COUNT yet)
         let flights = sqlx::query!(
             r#"
@@ -33,7 +44,7 @@ impl FlightRepository {
             leg.destination_airport_code,
             leg.date
         )
-        .fetch_all(pool)
+        .fetch_all(&self.pool)
         .await?;
 
         let mut options = Vec::new();
@@ -43,7 +54,7 @@ impl FlightRepository {
             let capacity = row.capacity;
             
             // 2. Access Redis for Availability
-            let cached_availability = redis.get_flight_availability(&flight_id.to_string()).await.ok().flatten();
+            let cached_availability = self.redis.get_flight_availability(&flight_id.to_string()).await.ok().flatten();
             
             let remaining = match cached_availability {
                 Some(count) => count as i64,
@@ -57,13 +68,13 @@ impl FlightRepository {
                         "#,
                         flight_id
                     )
-                    .fetch_one(pool)
+                    .fetch_one(&self.pool)
                     .await?;
                     
                     let count = (capacity as i64) - (booked_rec.count.unwrap_or(0));
                     
                     // Populate Cache
-                    let _ = redis.set_flight_availability(&flight_id.to_string(), count as i32).await;
+                    let _ = self.redis.set_flight_availability(&flight_id.to_string(), count as i32).await;
                     
                     count
                 }

@@ -33,3 +33,23 @@ pub struct FlightOption {
     pub price_amount: i32,
     pub price_currency: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    #[test]
+    fn test_search_leg_deserialization() {
+        let json = r#"
+            {
+                "origin_airport_code": "JFK",
+                "destination_airport_code": "LHR",
+                "date": "2024-12-25"
+            }
+        "#;
+        let leg: SearchLeg = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(leg.origin_airport_code, "JFK");
+        assert_eq!(leg.date, NaiveDate::from_ymd_opt(2024, 12, 25).unwrap());
+    }
+}

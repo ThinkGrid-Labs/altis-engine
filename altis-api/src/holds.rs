@@ -57,12 +57,14 @@ pub fn routes() -> Router<AppState> {
         .route("/v1/flights/:flight_id/stream", get(sse_stream))
 }
 
-async fn create_trip_hold(State(state): State<AppState>, Json(req): Json<CreateTripRequest>) -> impl IntoResponse {
+use crate::error::AppError;
+
+async fn create_trip_hold(State(state): State<AppState>, Json(req): Json<CreateTripRequest>) -> Result<Json<CreateTripResponse>, AppError> {
     let trip_id = Uuid::new_v4();
     let ttl = state.business_rules.trip_hold_seconds;
     
     if req.flight_ids.is_empty() {
-        return (axum::http::StatusCode::BAD_REQUEST, "No flights provided").into_response();
+        return Err(AppError::validation_error("No flights provided".to_string()));
     }
     
     let flight_ids_str = req.flight_ids.iter()
@@ -70,20 +72,18 @@ async fn create_trip_hold(State(state): State<AppState>, Json(req): Json<CreateT
         .collect::<Vec<String>>()
         .join(",");
 
-    // TODO: Extract claims from context (requires Middleware)
-    let owner_id = "guest"; // Placeholder, requires auth middleware
+    let owner_id = "guest"; // Placeholder
 
-    let _ = state.redis.hset_trip_field(&trip_id.to_string(), "flights", &flight_ids_str).await;
-    let _ = state.redis.hset_trip_field(&trip_id.to_string(), "owner", owner_id).await;
-    let _ = state.redis.hset_trip_field(&trip_id.to_string(), "status", "DRAFT").await;
-    let _ = state.redis.exp_trip_key(&trip_id.to_string(), ttl as usize).await;
+    state.redis.hset_trip_field(&trip_id.to_string(), "flights", &flight_ids_str).await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
+    state.redis.hset_trip_field(&trip_id.to_string(), "owner", owner_id).await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
+    state.redis.hset_trip_field(&trip_id.to_string(), "status", "DRAFT").await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
+    state.redis.exp_trip_key(&trip_id.to_string(), ttl as usize).await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
     let expires_at = Utc::now().timestamp() + (ttl as i64);
-    Json(CreateTripResponse { trip_id, expires_at }).into_response()
+    Ok(Json(CreateTripResponse { trip_id, expires_at }))
 }
 
-async fn create_seat_hold(State(state): State<AppState>, Json(req): Json<SeatHoldRequest>) -> impl IntoResponse {
-    // Logic similar to before, simplified error handling for MVP refactor
+async fn create_seat_hold(State(state): State<AppState>, Json(req): Json<SeatHoldRequest>) -> Result<Json<SeatHoldResponse>, AppError> {
     let ttl = state.business_rules.seat_hold_seconds;
     
     match state.redis.acquire_seat_lock(&req.flight_id.to_string(), &req.seat_number, &req.trip_id.to_string(), ttl).await {
@@ -94,24 +94,25 @@ async fn create_seat_hold(State(state): State<AppState>, Json(req): Json<SeatHol
                 trip_id: req.trip_id,
                 held_at: Utc::now().timestamp(),
             };
-            let payload = serde_json::to_string(&event).unwrap();
+            let payload = serde_json::to_string(&event).map_err(|e| AppError::InternalServerError(e.to_string()))?;
             let _ = state.kafka.publish("holds.created", &req.flight_id.to_string(), &payload).await;
             let _ = state.sse_tx.send(event);
             
-            Json(SeatHoldResponse { status: "HELD".to_string() }).into_response()
+            Ok(Json(SeatHoldResponse { status: "HELD".to_string() }))
         },
-        _ => (axum::http::StatusCode::CONFLICT, "Seat already held").into_response()
+        Ok(false) => Err(AppError::ConflictError("Seat already held".to_string())),
+        Err(e) => Err(AppError::InternalServerError(e.to_string())),
     }
 }
 
-async fn add_trip_passenger(State(state): State<AppState>, Path(trip_id): Path<Uuid>, Json(req): Json<AddPassengerRequest>) -> impl IntoResponse {
+async fn add_trip_passenger(State(state): State<AppState>, Path(trip_id): Path<Uuid>, Json(req): Json<AddPassengerRequest>) -> Result<Json<AddPassengerResponse>, AppError> {
     let passenger_id = Uuid::new_v4().to_string();
-    let pax_data = serde_json::to_string(&req).unwrap();
+    let pax_data = serde_json::to_string(&req).map_err(|e| AppError::InternalServerError(e.to_string()))?;
     let field = format!("pax:{}", passenger_id);
     
-    let _ = state.redis.hset_trip_field(&trip_id.to_string(), &field, &pax_data).await;
+    state.redis.hset_trip_field(&trip_id.to_string(), &field, &pax_data).await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
         
-    Json(AddPassengerResponse { passenger_id }).into_response()
+    Ok(Json(AddPassengerResponse { passenger_id }))
 }
 
 async fn sse_stream(State(state): State<AppState>, Path(flight_id): Path<Uuid>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {

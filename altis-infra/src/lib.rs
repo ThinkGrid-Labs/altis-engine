@@ -11,7 +11,7 @@ pub use database::DbClient;
 pub use redis_repo::RedisClient;
 pub use events::EventProducer;
 pub use booking_repo::BookingRepository;
-pub use flight_repo::FlightRepository;
+pub use flight_repo::PostgresFlightRepository;
 
 pub fn hello() {
     println!("Hello from Altis Infra!");

@@ -1,19 +1,19 @@
-use warp::Filter;
+use axum::{
+    extract::{State, Json},
+    routing::{post},
+    Router,
+};
+use axum_extra::headers::{Authorization, authorization::Bearer};
+use axum::TypedHeader;
 use std::sync::Arc;
-use altis_infra::{RedisClient, DbClient, EventProducer, BookingRepository};
+use altis_infra::BookingRepository;
 use altis_domain::booking::{CreateBookingRequest, BookingStatus};
 use uuid::Uuid;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::info;
-use crate::auth::{with_auth, Claims};
-
-#[derive(Clone)]
-pub struct AppState {
-    pub redis: Arc<RedisClient>,
-    pub db: Arc<DbClient>,
-    pub kafka: Arc<EventProducer>,
-    pub jwt_secret: String,
-}
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use crate::state::AppState;
+use crate::error::AppError;
 
 #[derive(Debug, Serialize)]
 struct BookingResponse {
@@ -21,45 +21,56 @@ struct BookingResponse {
     status: String,
 }
 
-pub fn routes(state: AppState) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let state_filter = warp::any().map(move || state.clone());
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    sub: String,
+    role: String,
+    exp: usize,
+}
 
-    warp::path!("v1" / "bookings" / "commit")
-        .and(warp::post())
-        .and(with_auth(state.jwt_secret.clone())) 
-        .and(warp::body::json())
-        .and(state_filter.clone())
-        .and_then(commit_booking)
+pub fn routes() -> Router<AppState> {
+    Router::new().route("/v1/bookings/commit", post(commit_booking))
 }
-        .and(warp::body::json())
-        .and(state_filter.clone())
-        .and_then(commit_booking)
-}
+
+async fn commit_booking(
+    State(state): State<AppState>,
+    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    Json(req): Json<CreateBookingRequest>
+) -> Result<Json<BookingResponse>, AppError> {
+
+    // Decode Token (Manually for now, ideally via Middleware)
+    let token_data = decode::<Claims>(
+        bearer.token(),
+        &DecodingKey::from_secret(state.auth.secret.as_bytes()),
+        &Validation::default(),
+    ).map_err(|e| AppError::AuthenticationError(e.to_string()))?;
+
+    let claims = token_data.claims;
 
     // 1. Validate Trip Hold via Hash
-    let owner_opt = state.redis.hget_trip_field(&req.trip_id.to_string(), "owner").await.map_err(|_| warp::reject::custom(InternalServerError))?;
-    let flights_opt = state.redis.hget_trip_field(&req.trip_id.to_string(), "flights").await.map_err(|_| warp::reject::custom(InternalServerError))?;
+    let owner_opt = state.redis.hget_trip_field(&req.trip_id.to_string(), "owner").await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
+    let flights_opt = state.redis.hget_trip_field(&req.trip_id.to_string(), "flights").await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
     let owner_id = match owner_opt {
         Some(v) => v,
-        None => return Ok(warp::reply::with_status(warp::reply::json(&"Trip expired or invalid"), warp::http::StatusCode::BAD_REQUEST)),
+        None => return Err(AppError::validation_error("Trip expired or invalid".to_string())),
     };
     
     // 2. Verify Ownership
     if owner_id != claims.sub {
-        return Ok(warp::reply::with_status(warp::reply::json(&"Unauthorized: Trip does not belong to you"), warp::http::StatusCode::FORBIDDEN));
+        return Err(AppError::AuthorizationError("Unauthorized: Trip does not belong to you".to_string()));
     }
 
-    let flight_ids_str = flights_opt.ok_or(warp::reject::custom(InternalServerError))?;
+    let flight_ids_str = flights_opt.ok_or(AppError::InternalServerError("Missing flight data".to_string()))?;
     let flight_ids: Vec<&str> = flight_ids_str.split(',').collect();
-    let primary_flight_id = Uuid::parse_str(flight_ids[0]).map_err(|_| warp::reject::custom(InternalServerError))?;
+    let primary_flight_id = Uuid::parse_str(flight_ids[0]).map_err(|_| AppError::InternalServerError("Invalid flight ID".to_string()))?;
 
     // 3. Start Transaction
-    let mut tx = state.db.pool.begin().await.map_err(|_| warp::reject::custom(InternalServerError))?;
+    let mut tx = state.db.pool.begin().await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
     let booking_id = Uuid::new_v4();
     
-    // Create Booking (referencing primary flight for now)
+    // Create Booking
     let _booking = BookingRepository::create_booking(
         &mut tx,
         booking_id,
@@ -69,7 +80,7 @@ pub fn routes(state: AppState) -> impl Filter<Extract = impl warp::Reply, Error 
         "USD"
     ).await.map_err(|e| {
         info!("Failed to create booking: {}", e);
-        warp::reject::custom(InternalServerError)
+        AppError::InternalServerError(e.to_string())
     })?;
 
     // Add Passengers & Seats
@@ -82,30 +93,26 @@ pub fn routes(state: AppState) -> impl Filter<Extract = impl warp::Reply, Error 
             &p.seats
         ).await.map_err(|e| {
             info!("Failed to add passenger: {}", e);
-            warp::reject::custom(InternalServerError)
+            AppError::InternalServerError(e.to_string())
         })?;
     }
 
     // Confirm Booking
     BookingRepository::confirm_booking(&mut tx, booking_id).await.map_err(|e| {
         info!("Failed to confirm booking: {}", e);
-        warp::reject::custom(InternalServerError)
+        AppError::InternalServerError(e.to_string())
     })?;
 
     // Commit Transaction
-    tx.commit().await.map_err(|_| warp::reject::custom(InternalServerError))?;
+    tx.commit().await.map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
     // 4. Publish Event
     let _ = state.kafka.publish("booking.confirmed", &booking_id.to_string(), &booking_id.to_string()).await;
 
     info!("Booking confirmed: {}", booking_id);
 
-    Ok(warp::reply::json(&BookingResponse {
+    Ok(Json(BookingResponse {
         booking_id,
         status: BookingStatus::CONFIRMED.to_string(),
     }))
 }
-
-#[derive(Debug)]
-struct InternalServerError;
-impl warp::reject::Reject for InternalServerError {}

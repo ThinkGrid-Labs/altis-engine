@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::{Utc, Duration};
 use uuid::Uuid;
-use crate::state::AppState;
+use crate::{state::AppState, error::AppError};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -27,15 +27,15 @@ pub fn routes() -> Router<AppState> {
     Router::new().route("/guest", post(login_guest))
 }
 
-async fn login_guest(State(state): State<AppState>) -> impl IntoResponse {
+async fn login_guest(State(state): State<AppState>) -> Result<Json<AuthResponse>, AppError> {
     let my_claims = Claims {
         sub: format!("guest-{}", Uuid::new_v4()),
         role: "guest".to_owned(),
-        exp: (Utc::now() + Duration::seconds(state.jwt_expiration as i64)).timestamp() as usize,
+        exp: (Utc::now() + Duration::seconds(state.auth.expiration as i64)).timestamp() as usize,
     };
 
-    let token = encode(&Header::default(), &my_claims, &EncodingKey::from_secret(state.jwt_secret.as_bytes()))
-        .unwrap();
+    let token = encode(&Header::default(), &my_claims, &EncodingKey::from_secret(state.auth.secret.as_bytes()))
+        .map_err(|e| AppError::InternalServerError(format!("Token encoding failed: {}", e)))?;
 
-    Json(AuthResponse { token })
+    Ok(Json(AuthResponse { token }))
 }

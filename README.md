@@ -16,9 +16,9 @@ It features a Hexagonal Architecture, Real-Time Availability Index (CQRS), and a
 Altis is designed as an **Event-Driven Hexagonal Architecture**, prioritizing scalability and maintainability.
 
 ### 1. Modularity (Clean Architecture)
-- **Domain Layer (`altis-domain`)**: Pure business logic with zero dependencies, ensuring testability.
-- **Infrastructure Layer (`altis-infra`)**: Pluggable adapters for Redis, Postgres, and Kafka using the **Repository Pattern**.
-- **API Layer (`altis-api`)**: Stateless HTTP adapter (Axum) leveraging **Dependency Injection** for resources.
+- **Domain Layer (`altis-domain`)**: Pure business logic with zero dependencies. Defines **Traits (Ports)** for infrastructure.
+- **Infrastructure Layer (`altis-infra`)**: Pluggable adapters (`PostgresFlightRepository`) implementing Domain Traits.
+- **API Layer (`altis-api`)**: Stateless HTTP adapter (Axum) leveraging **Dependency Injection** (Traits) and **Typed Configuration**.
 
 ### 2. Scalability (CQRS & Async)
 - **Reads**: 99% of traffic (Search) hits Redis (Availability Index) for sub-millisecond response times.

@@ -45,25 +45,33 @@ impl RedisClient {
             .await?;
 
         Ok(result.is_some())
-    pub async fn decr_flight_availability(&self, flight_id: &str) -> RedisResult<i64> {
+    }
+
+    pub async fn decr_flight_availability(&self, flight_id: &str) -> RedisResult<Option<i64>> {
         let mut conn = self.client.get_async_connection().await?;
         let key = format!("flight:{}:availability", flight_id);
-        // Atomic DECR. Returns new value.
-        // If key doesn't exist, Redis treats as 0. This is tricky.
-        // We need to check existence if we want lazy loading, OR ensure it's seeded.
-        // Enterprise: If it doesn't exist, we can ignore (Search will seed it correctly) OR try to init.
-        // Simple DECR is safest for now, but if it goes negative, that's fine (indicates overbooking or just unseeded).
-        // Better: Lua script "if exists then DECR else return nil".
-        // For MVP-Enterprise, just DECR.
-        conn.decr(key, 1).await
+        // Enterprise Upgrade: Use Lua script to ensuring we don't seed negative values on cache miss.
+        // If key exists, DECR it. If not, return nil (and let the next Search re-seed it from DB).
+        let script = redis::Script::new(r#"
+            if redis.call("EXISTS", KEYS[1]) == 1 then
+                return redis.call("DECR", KEYS[1])
+            else
+                return nil
+            end
+        "#);
+        
+        script.key(key).invoke_async(&mut conn).await
+    }
         pub async fn delete_flight_availability(&self, flight_id: &str) -> RedisResult<()> {
         let mut conn = self.client.get_async_connection().await?;
         let key = format!("flight:{}:availability", flight_id);
         conn.del(key).await
+    }
         pub async fn del_trip_key(&self, trip_id: &str) -> RedisResult<()> {
         let mut conn = self.client.get_async_connection().await?;
         let key = format!("trip:{}", trip_id);
         conn.del(key).await
+    }
     }
 
     // Hash Operations for Sessions
@@ -85,5 +93,4 @@ impl RedisClient {
         conn.expire(key, ttl_seconds).await
     }
 }
-}
-}
+

@@ -5,6 +5,9 @@ use chrono::Utc;
 
 pub struct BookingRepository;
 
+// Note: BookingRepository is intentionally left as a static struct (not a Trait) 
+// because it relies heavily on `sqlx::Transaction`, which is difficult to abstract 
+// in an object-safe Trait without advanced Rust patterns (GATs) or leaking implementation details.
 impl BookingRepository {
     pub async fn create_booking(
         tx: &mut sqlx::Transaction<'_, Postgres>,

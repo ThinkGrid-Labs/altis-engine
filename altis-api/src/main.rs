@@ -15,13 +15,23 @@ mod state;
 mod search;
 mod worker;
 mod summary_handler;
+mod error;
+
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "altis_api=debug,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
     
     let config = altis_infra::config::Config::load().expect("Failed to load configuration");
-    println!("Starting Altis API on port {}", config.server.port);
+    tracing::info!("Starting Altis API on port {}", config.server.port);
     println!("Database URL: {}", config.database.url);
 
     // DB Connection
@@ -52,13 +62,22 @@ async fn main() {
         }
     };
 
+    // Repositories
+    let flight_repo = Arc::new(altis_infra::PostgresFlightRepository {
+        pool: db_arc.pool.clone(), // assuming DbClient has pub pool
+        redis: redis_client.clone(),
+    });
+
     let app_state = AppState {
         db: db_arc.clone(),
         redis: redis_arc.clone(),
         kafka: kafka_arc.clone(),
+        flight_repo,
         sse_tx: sse_tx.clone(),
-        jwt_secret: config.auth.jwt_secret.clone(),
-        jwt_expiration: config.auth.jwt_expiration_seconds,
+        auth: crate::state::AuthConfig {
+            secret: config.auth.jwt_secret.clone(),
+            expiration: config.auth.jwt_expiration_seconds,
+        },
         business_rules: dynamic_rules.clone(),
     };
 
@@ -89,6 +108,7 @@ async fn main() {
         .merge(search::routes())
         .route("/v1/trips/:trip_id/summary", get(summary_handler::get_trip_summary))
         .layer(cors)
+        .layer(TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn_with_state(app_state.clone(), rate_limit_middleware))
         .with_state(app_state);
 
