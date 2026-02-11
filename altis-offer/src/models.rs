@@ -17,6 +17,7 @@ pub enum OfferStatus {
 pub struct Offer {
     pub id: Uuid,
     pub customer_id: Option<String>,
+    pub airline_id: Option<Uuid>,
     pub search_context: serde_json::Value,
     pub items: Vec<OfferItem>,
     pub total_nuc: i32,
@@ -28,11 +29,12 @@ pub struct Offer {
 
 impl Offer {
     /// Create a new offer with 15-minute expiry
-    pub fn new(customer_id: Option<String>, search_context: serde_json::Value) -> Self {
+    pub fn new(customer_id: Option<String>, airline_id: Option<Uuid>, search_context: serde_json::Value) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
             customer_id,
+            airline_id,
             search_context,
             items: Vec::new(),
             total_nuc: 0,
@@ -64,30 +66,36 @@ impl Offer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OfferItem {
     pub id: Uuid,
-    pub offer_id: Uuid,
+    pub product_id: Option<Uuid>,
     pub product_type: String,
-    pub product_id: Uuid,
-    pub product_name: String,
+    pub product_code: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
     pub price_nuc: i32,
+    pub quantity: i32,
     pub metadata: serde_json::Value,
 }
 
 impl OfferItem {
     pub fn new(
-        offer_id: Uuid,
         product_type: String,
-        product_id: Uuid,
-        product_name: String,
+        product_id: Option<Uuid>,
+        product_code: Option<String>,
+        name: String,
+        description: Option<String>,
         price_nuc: i32,
+        quantity: i32,
         metadata: serde_json::Value,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
-            offer_id,
-            product_type,
             product_id,
-            product_name,
+            product_type,
+            product_code,
+            name,
+            description,
             price_nuc,
+            quantity,
             metadata,
         }
     }

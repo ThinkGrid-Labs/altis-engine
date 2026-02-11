@@ -30,10 +30,15 @@ pub enum OrderItemStatus {
 pub struct Order {
     pub id: Uuid,
     pub customer_id: String,
+    pub customer_email: Option<String>,
+    pub offer_id: Option<Uuid>,
+    pub airline_id: Option<Uuid>,
     pub items: Vec<OrderItem>,
     pub total_nuc: i32,
     pub currency: String,
     pub status: OrderStatus,
+    pub payment_method: Option<String>,
+    pub payment_reference: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -79,35 +84,39 @@ impl Order {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderItem {
     pub id: Uuid,
-    pub order_id: Uuid,
+    pub product_id: Option<Uuid>,
     pub product_type: String,
-    pub product_id: Uuid,
-    pub product_name: String,
+    pub product_code: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
     pub price_nuc: i32,
+    pub quantity: i32,
     pub status: OrderItemStatus,
     pub metadata: serde_json::Value,
-    pub created_at: DateTime<Utc>,
 }
 
 impl OrderItem {
     pub fn new(
-        order_id: Uuid,
         product_type: String,
-        product_id: Uuid,
-        product_name: String,
+        product_id: Option<Uuid>,
+        product_code: Option<String>,
+        name: String,
+        description: Option<String>,
         price_nuc: i32,
+        quantity: i32,
         metadata: serde_json::Value,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
-            order_id,
-            product_type,
             product_id,
-            product_name,
+            product_type,
+            product_code,
+            name,
+            description,
             price_nuc,
+            quantity,
             status: OrderItemStatus::Active,
             metadata,
-            created_at: Utc::now(),
         }
     }
     
