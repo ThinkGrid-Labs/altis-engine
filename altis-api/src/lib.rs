@@ -17,6 +17,7 @@ pub mod error;
 pub mod offers;
 pub mod orders;
 pub mod admin;
+pub mod middleware;
 
 pub use state::AppState;
 
