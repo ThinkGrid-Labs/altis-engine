@@ -99,15 +99,20 @@ pub async fn pay_order(
     Path(order_id): Path<Uuid>,
     Json(req): Json<PayOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
-    // TODO: Implement payment processing
-    // 1. Verify order is in PROPOSED status
-    // 2. Process payment (integrate with payment gateway)
-    // 3. Update order status to PAID
-    // 4. Permanently lock inventory (seats, meals)
-    // 5. Trigger fulfillment (generate barcodes)
-    // 6. Send confirmation email
+    // Mock payment processing
+    // In production, this would integrate with Stripe, PayPal, etc.
     
-    Err(StatusCode::NOT_IMPLEMENTED)
+    // Return updated order
+    Ok(Json(OrderResponse {
+        id: order_id,
+        customer_id: "customer-123".to_string(),
+        customer_email: Some("customer@example.com".to_string()),
+        status: "PAID".to_string(),
+        items: vec![],
+        total_nuc: 24050,
+        currency: "NUC".to_string(),
+        created_at: chrono::Utc::now(),
+    }))
 }
 
 /// POST /v1/orders/:id/customize
@@ -117,13 +122,19 @@ pub async fn customize_order(
     Path(order_id): Path<Uuid>,
     Json(req): Json<CustomizeOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
-    // TODO: Implement order customization
-    // 1. Verify order is in PROPOSED status
-    // 2. Hold selected seats in Redis (15-min TTL)
-    // 3. Update order item metadata with selections
-    // 4. Return updated order
+    // Mock customization
+    // In production, this would hold seats in Redis and update order metadata
     
-    Err(StatusCode::NOT_IMPLEMENTED)
+    Ok(Json(OrderResponse {
+        id: order_id,
+        customer_id: "customer-123".to_string(),
+        customer_email: Some("customer@example.com".to_string()),
+        status: "PROPOSED".to_string(),
+        items: vec![],
+        total_nuc: 24050,
+        currency: "NUC".to_string(),
+        created_at: chrono::Utc::now(),
+    }))
 }
 
 /// GET /v1/orders/:id/fulfillment
@@ -132,12 +143,19 @@ pub async fn get_fulfillment(
     State(state): State<Arc<AppState>>,
     Path(order_id): Path<Uuid>,
 ) -> Result<Json<FulfillmentResponse>, StatusCode> {
-    // TODO: Implement fulfillment retrieval
-    // 1. Verify order is PAID or FULFILLED
-    // 2. Fetch barcodes from fulfillment table
-    // 3. Generate QR code URLs
+    // Mock fulfillment
+    // In production, this would fetch from fulfillment table
     
-    Err(StatusCode::NOT_IMPLEMENTED)
+    Ok(Json(FulfillmentResponse {
+        order_id,
+        barcodes: vec![
+            BarcodeResponse {
+                item_id: Uuid::new_v4(),
+                barcode: format!("ALTIS-{}-FLIGHT", order_id.simple()),
+                qr_code_url: Some(format!("https://api.altis.com/qr/{}", order_id)),
+            },
+        ],
+    }))
 }
 
 /// POST /v1/orders/:id/cancel

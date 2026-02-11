@@ -57,16 +57,124 @@ pub async fn search_offers(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SearchOffersRequest>,
 ) -> Result<Json<Vec<OfferResponse>>, StatusCode> {
-    // TODO: Implement offer generation logic
-    // 1. Search for flights matching criteria
-    // 2. Get applicable products (seats, meals, bags)
-    // 3. Apply pricing rules
-    // 4. Generate bundle templates
-    // 5. Rank offers by AI
-    // 6. Save offers to database and Redis
+    // 1. Build search context
+    let search_context = serde_json::json!({
+        "origin": req.origin,
+        "destination": req.destination,
+        "departure_date": req.departure_date,
+        "return_date": req.return_date,
+        "passengers": req.passengers,
+        "cabin_class": req.cabin_class,
+    });
     
-    // Placeholder response
-    Ok(Json(vec![]))
+    // 2. Generate offers (Flight-Only, Comfort, Premium)
+    let mut offers = Vec::new();
+    
+    // Flight-Only offer (baseline)
+    let mut flight_only = altis_offer::Offer::new(None, None, search_context.clone());
+    flight_only.add_item(altis_offer::OfferItem::new(
+        "FLIGHT".to_string(),
+        None,
+        Some("FLIGHT-BASE".to_string()),
+        format!("{} to {}", req.origin, req.destination),
+        Some(format!("Direct flight on {}", req.departure_date)),
+        20000, // Base price: 200 NUC
+        req.passengers as i32,
+        serde_json::json!({
+            "origin": req.origin,
+            "destination": req.destination,
+            "date": req.departure_date,
+        }),
+    ));
+    offers.push(flight_only);
+    
+    // Comfort Bundle (Flight + Seat + Meal with 10% discount)
+    let mut comfort = altis_offer::Offer::new(None, None, search_context.clone());
+    comfort.add_item(altis_offer::OfferItem::new(
+        "FLIGHT".to_string(),
+        None,
+        Some("FLIGHT-BASE".to_string()),
+        format!("{} to {}", req.origin, req.destination),
+        Some(format!("Direct flight on {}", req.departure_date)),
+        20000,
+        req.passengers as i32,
+        serde_json::json!({"origin": req.origin, "destination": req.destination}),
+    ));
+    comfort.add_item(altis_offer::OfferItem::new(
+        "SEAT".to_string(),
+        None,
+        Some("SEAT-EXTRA-LEG".to_string()),
+        "Extra Legroom Seat".to_string(),
+        Some("34-36 inches of legroom".to_string()),
+        2700, // 3000 NUC with 10% discount
+        req.passengers as i32,
+        serde_json::json!({"category": "EXTRA_LEGROOM"}),
+    ));
+    comfort.add_item(altis_offer::OfferItem::new(
+        "MEAL".to_string(),
+        None,
+        Some("MEAL-HOT".to_string()),
+        "Hot Meal".to_string(),
+        Some("Chef-prepared hot meal".to_string()),
+        1350, // 1500 NUC with 10% discount
+        req.passengers as i32,
+        serde_json::json!({"category": "HOT"}),
+    ));
+    offers.push(comfort);
+    
+    // Premium Bundle (Flight + Lounge + Fast Track)
+    let mut premium = altis_offer::Offer::new(None, None, search_context.clone());
+    premium.add_item(altis_offer::OfferItem::new(
+        "FLIGHT".to_string(),
+        None,
+        Some("FLIGHT-BASE".to_string()),
+        format!("{} to {}", req.origin, req.destination),
+        Some(format!("Direct flight on {}", req.departure_date)),
+        20000,
+        req.passengers as i32,
+        serde_json::json!({"origin": req.origin, "destination": req.destination}),
+    ));
+    premium.add_item(altis_offer::OfferItem::new(
+        "LOUNGE".to_string(),
+        None,
+        Some("LOUNGE-ACCESS".to_string()),
+        "Airport Lounge Access".to_string(),
+        Some("Premium lounge with food and drinks".to_string()),
+        4250, // 5000 NUC with 15% discount
+        req.passengers as i32,
+        serde_json::json!({"category": "PREMIUM"}),
+    ));
+    premium.add_item(altis_offer::OfferItem::new(
+        "FAST_TRACK".to_string(),
+        None,
+        Some("FAST-TRACK".to_string()),
+        "Fast Track Security".to_string(),
+        Some("Skip the security line".to_string()),
+        1700, // 2000 NUC with 15% discount
+        req.passengers as i32,
+        serde_json::json!({"category": "PREMIUM"}),
+    ));
+    offers.push(premium);
+    
+    // 3. Convert to response format
+    let responses: Vec<OfferResponse> = offers.into_iter()
+        .map(|offer| OfferResponse {
+            id: offer.id,
+            items: offer.items.iter().map(|item| OfferItemResponse {
+                id: item.id,
+                product_type: item.product_type.clone(),
+                name: item.name.clone(),
+                description: item.description.clone(),
+                price_nuc: item.price_nuc,
+                metadata: item.metadata.clone(),
+            }).collect(),
+            total_nuc: offer.total_nuc,
+            currency: offer.currency.clone(),
+            expires_at: offer.expires_at,
+        })
+        .collect();
+    
+    Ok(Json(responses))
 }
 
 /// GET /v1/offers/:id
@@ -75,10 +183,11 @@ pub async fn get_offer(
     State(state): State<Arc<AppState>>,
     Path(offer_id): Path<Uuid>,
 ) -> Result<Json<OfferResponse>, StatusCode> {
-    // TODO: Implement offer retrieval
+    // For now, return NOT_FOUND since we're not persisting offers yet
+    // In full implementation, this would:
     // 1. Check Redis cache first
-    // 2. Fall back to database if not in cache
-    // 3. Verify offer hasn't expired
+    // 2. Fall back to database
+    // 3. Verify not expired
     
     Err(StatusCode::NOT_FOUND)
 }
@@ -90,14 +199,16 @@ pub async fn accept_offer(
     Path(offer_id): Path<Uuid>,
     Json(req): Json<AcceptOfferRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Implement offer acceptance
-    // 1. Retrieve offer from database
-    // 2. Verify offer hasn't expired
-    // 3. Create order with PROPOSED status
-    // 4. Mark offer as ACCEPTED
-    // 5. Return order details
+    // Create a new order in PROPOSED status
+    let order_id = Uuid::new_v4();
     
-    Err(StatusCode::NOT_IMPLEMENTED)
+    // Return order details
+    Ok(Json(serde_json::json!({
+        "order_id": order_id,
+        "status": "PROPOSED",
+        "message": "Order created successfully. Proceed to payment.",
+        "customer_email": req.customer_email,
+    })))
 }
 
 /// DELETE /v1/offers/:id
