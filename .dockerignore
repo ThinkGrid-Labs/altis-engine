@@ -1,0 +1,23 @@
+# Ignore everything
+*
+
+# Allow specific files
+!Dockerfile
+!docker-compose.yml
+!Cargo.toml
+!Cargo.lock
+!.dockerignore
+
+# Allow source code
+!**/*.rs
+!**/*.toml
+
+# Allow migrations
+!migrations/
+!migrations/*.sql
+
+# Allow config
+!config/
+!config/*.toml
+!config/*.yaml
+!config/*.yml

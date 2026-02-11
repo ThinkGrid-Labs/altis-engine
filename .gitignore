@@ -34,8 +34,5 @@ altis-api/check_output.txt
 *.db
 *.sqlite
 
-# Docker
-.dockerignore
-
 # OS
 Thumbs.db
