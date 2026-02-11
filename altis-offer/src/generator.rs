@@ -81,7 +81,7 @@ impl OfferGenerator {
         ancillary_products: &[Product],
         strategy: OfferStrategy,
     ) -> Result<Option<Offer>, OfferError> {
-        let mut offer = Offer::new(customer_id, search_context);
+        let mut offer = Offer::new(customer_id, None, search_context);
         
         // Add flight products
         for flight in flight_products {
