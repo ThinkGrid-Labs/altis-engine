@@ -1,6 +1,6 @@
 extern crate altis_core;
 use axum::{
-    routing::get,
+    routing::{get, post, put, delete},
     Router,
     http::Method,
     extract::State,
@@ -14,15 +14,66 @@ pub mod auth;
 pub mod state;
 pub mod search;
 pub mod error;
+pub mod offers;
+pub mod orders;
+pub mod admin;
 
 pub use state::AppState;
 
-// Renamed main's router setup to a function
+// ============================================================================
+// Customer-Facing Routes (/v1/*)
+// ============================================================================
+
+fn customer_routes() -> Router<AppState> {
+    Router::new()
+        // Authentication
+        .merge(auth::routes())
+        
+        // Flight Search
+        .merge(search::routes())
+        
+        // Offers
+        .route("/offers/search", post(offers::search_offers))
+        .route("/offers/:id", get(offers::get_offer).delete(offers::expire_offer))
+        .route("/offers/:id/accept", post(offers::accept_offer))
+        
+        // Orders
+        .route("/orders", get(orders::list_orders))
+        .route("/orders/:id", get(orders::get_order))
+        .route("/orders/:id/pay", post(orders::pay_order))
+        .route("/orders/:id/customize", post(orders::customize_order))
+        .route("/orders/:id/fulfillment", get(orders::get_fulfillment))
+        .route("/orders/:id/cancel", post(orders::cancel_order))
+}
+
+// ============================================================================
+// Admin Routes (/v1/admin/*)
+// ============================================================================
+
+fn admin_routes() -> Router<AppState> {
+    Router::new()
+        // Product Management
+        .route("/airlines/:airline_id/products", get(admin::list_products).post(admin::create_product))
+        .route("/products/:id", get(admin::get_product).put(admin::update_product).delete(admin::delete_product))
+        
+        // Pricing Rules
+        .route("/airlines/:airline_id/pricing-rules", get(admin::list_pricing_rules).post(admin::create_pricing_rule))
+        .route("/pricing-rules/:id", get(admin::get_pricing_rule).put(admin::update_pricing_rule).delete(admin::delete_pricing_rule))
+        
+        // Bundle Templates
+        .route("/airlines/:airline_id/bundles", get(admin::list_bundles).post(admin::create_bundle))
+        .route("/bundles/:id", get(admin::get_bundle).put(admin::update_bundle).delete(admin::delete_bundle))
+}
+
+// ============================================================================
+// Main Application Router
+// ============================================================================
+
 pub fn app(state: AppState) -> Router {
     // CORS Middleware
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
-        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers([
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
@@ -30,13 +81,25 @@ pub fn app(state: AppState) -> Router {
         ]);
 
     Router::new()
-        .merge(auth::routes())
-        .merge(search::routes())
+        // Customer routes at /v1/*
+        .nest("/v1", customer_routes())
+        
+        // Admin routes at /v1/admin/*
+        .nest("/v1/admin", admin_routes())
+        
+        // Health check
+        .route("/health", get(health_check))
+        
+        // Middleware
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .with_state(state)
 }
+
+// ============================================================================
+// Middleware
+// ============================================================================
 
 async fn rate_limit_middleware(
     State(state): State<AppState>,
@@ -52,4 +115,15 @@ async fn rate_limit_middleware(
         Ok(false) => Err((axum::http::StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded")),
         Err(_) => Ok(next.run(req).await), // Fail open
     }
+}
+
+// ============================================================================
+// Health Check
+// ============================================================================
+
+async fn health_check() -> impl IntoResponse {
+    axum::Json(serde_json::json!({
+        "status": "healthy",
+        "version": env!("CARGO_PKG_VERSION")
+    }))
 }
