@@ -1,6 +1,12 @@
 use async_trait::async_trait;
 use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+
 use crate::search::FlightSearchResult;
+
+// Re-export types from other crates to avoid circular dependencies
+// These are defined here as traits/interfaces that implementations will use
 
 /// Repository trait for flight data access
 #[async_trait]
@@ -13,23 +19,24 @@ pub trait FlightRepository: Send + Sync {
     ) -> Result<Vec<FlightSearchResult>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// Repository trait for offer data access
+/// Generic repository trait for offer data access
+/// Uses serde_json::Value to avoid circular dependencies
 #[async_trait]
 pub trait OfferRepository: Send + Sync {
     async fn save_offer(
         &self,
-        offer: &altis_offer::Offer,
+        offer: &serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     
     async fn get_offer(
         &self,
         id: Uuid,
-    ) -> Result<Option<altis_offer::Offer>, Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn list_active_offers(
         &self,
         customer_id: &str,
-    ) -> Result<Vec<altis_offer::Offer>, Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn expire_offer(
         &self,
@@ -37,60 +44,60 @@ pub trait OfferRepository: Send + Sync {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// Repository trait for order data access
+/// Generic repository trait for order data access
 #[async_trait]
 pub trait OrderRepository: Send + Sync {
     async fn create_order(
         &self,
-        order: &altis_order::Order,
+        order: &serde_json::Value,
     ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn get_order(
         &self,
         id: Uuid,
-    ) -> Result<Option<altis_order::Order>, Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn update_order_status(
         &self,
         id: Uuid,
-        status: altis_order::OrderStatus,
+        status: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     
     async fn add_order_item(
         &self,
         order_id: Uuid,
-        item: &altis_order::OrderItem,
+        item: &serde_json::Value,
     ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn list_orders(
         &self,
         customer_id: &str,
-    ) -> Result<Vec<altis_order::Order>, Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// Repository trait for product catalog access
+/// Generic repository trait for product catalog access
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
     async fn create_product(
         &self,
-        product: &altis_catalog::Product,
+        product: &serde_json::Value,
     ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn get_product(
         &self,
         id: Uuid,
-    ) -> Result<Option<altis_catalog::Product>, Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn list_products(
         &self,
         airline_id: Uuid,
         product_type: Option<&str>,
-    ) -> Result<Vec<altis_catalog::Product>, Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
     
     async fn update_product(
         &self,
         id: Uuid,
-        product: &altis_catalog::Product,
+        product: &serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     
     async fn delete_product(
