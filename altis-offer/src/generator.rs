@@ -93,7 +93,7 @@ impl OfferGenerator {
             let item = OfferItem::new(
                 format!("{:?}", flight.product_type),
                 Some(flight.id),
-                Some(flight.product_code.clone()),
+                None, // product_code
                 flight.name.clone(),
                 flight.description.clone(),
                 price,
@@ -155,7 +155,7 @@ impl OfferGenerator {
                 let item = OfferItem::new(
                     format!("{:?}", product.product_type),
                     Some(product.id),
-                    Some(product.product_code.clone()),
+                    None, // product_code
                     product.name.clone(),
                     product.description.clone(),
                     price,
