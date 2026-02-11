@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                f.id, f.flight_number, f.scheduled_departure as \"departure_time!\", f.scheduled_arrival as \"arrival_time!\", \n                r.origin_iata as \"origin_airport_code!\", r.destination_iata as \"destination_airport_code!\",\n                ac.name as \"aircraft_model!\",\n                ac.capacity,\n                f.base_price_amount, f.base_price_currency\n            FROM flights f\n            JOIN routes r ON f.route_id = r.id\n            JOIN aircraft_configs ac ON f.aircraft_config_id = ac.id\n            WHERE \n                r.origin_iata = $1 \n                AND r.destination_iata = $2\n                AND DATE(f.scheduled_departure) = $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "flight_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "departure_time!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "arrival_time!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "origin_airport_code!",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "destination_airport_code!",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "aircraft_model!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "capacity",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "base_price_amount",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "base_price_currency",
+        "type_info": "Bpchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bpchar",
+        "Bpchar",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "056c7e05d9ce2c33641b8f7607bc716af655b6f4f37e44f742aa29b5c962487e"
+}

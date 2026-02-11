@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rule_key, rule_value FROM business_rules",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rule_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "rule_value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "95773a2fba9a86772fe9d24f8d3fdad0f1264a8f5f7e1455060132681b2b013f"
+}

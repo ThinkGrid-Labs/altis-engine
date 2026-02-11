@@ -15,9 +15,6 @@ Cargo.lock
 *~
 .DS_Store
 
-# SQLx
-.sqlx/
-
 # Environment
 .env
 .env.local
