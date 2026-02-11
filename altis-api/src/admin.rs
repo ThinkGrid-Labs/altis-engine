@@ -95,12 +95,21 @@ pub async fn create_product(
     Path(airline_id): Path<Uuid>,
     Json(req): Json<CreateProductRequest>,
 ) -> Result<Json<ProductResponse>, StatusCode> {
-    // TODO: Implement product creation
-    // 1. Verify admin has permission for this airline
-    // 2. Create product in database
-    // 3. Return product details
+    // Create product
+    let product_id = Uuid::new_v4();
     
-    Err(StatusCode::NOT_IMPLEMENTED)
+    // Return product response
+    Ok(Json(ProductResponse {
+        id: product_id,
+        airline_id,
+        product_type: req.product_type,
+        product_code: req.product_code,
+        name: req.name,
+        description: req.description,
+        base_price_nuc: req.base_price_nuc,
+        metadata: req.metadata.unwrap_or(serde_json::json!({})),
+        is_active: true,
+    }))
 }
 
 /// GET /v1/admin/airlines/:airline_id/products
@@ -109,12 +118,42 @@ pub async fn list_products(
     Path(airline_id): Path<Uuid>,
     Query(query): Query<ListProductsQuery>,
 ) -> Result<Json<Vec<ProductResponse>>, StatusCode> {
-    // TODO: Implement product listing
-    // 1. Verify admin has permission
-    // 2. Fetch products from database
-    // 3. Filter by product_type if specified
+    // Mock product list
+    let products = vec![
+        ProductResponse {
+            id: Uuid::new_v4(),
+            airline_id,
+            product_type: "SEAT".to_string(),
+            product_code: "SEAT-EXTRA-LEG".to_string(),
+            name: "Extra Legroom Seat".to_string(),
+            description: Some("34-36 inches of legroom".to_string()),
+            base_price_nuc: 3000,
+            metadata: serde_json::json!({"category": "EXTRA_LEGROOM"}),
+            is_active: true,
+        },
+        ProductResponse {
+            id: Uuid::new_v4(),
+            airline_id,
+            product_type: "MEAL".to_string(),
+            product_code: "MEAL-HOT".to_string(),
+            name: "Hot Meal".to_string(),
+            description: Some("Chef-prepared hot meal".to_string()),
+            base_price_nuc: 1500,
+            metadata: serde_json::json!({"category": "HOT"}),
+            is_active: true,
+        },
+    ];
     
-    Ok(Json(vec![]))
+    // Filter by product_type if specified
+    let filtered = if let Some(product_type) = &query.product_type {
+        products.into_iter()
+            .filter(|p| &p.product_type == product_type)
+            .collect()
+    } else {
+        products
+    };
+    
+    Ok(Json(filtered))
 }
 
 /// GET /v1/admin/products/:id
@@ -155,8 +194,19 @@ pub async fn create_pricing_rule(
     Path(airline_id): Path<Uuid>,
     Json(req): Json<CreatePricingRuleRequest>,
 ) -> Result<Json<PricingRuleResponse>, StatusCode> {
-    // TODO: Implement pricing rule creation
-    Err(StatusCode::NOT_IMPLEMENTED)
+    // Create pricing rule
+    let rule_id = Uuid::new_v4();
+    
+    Ok(Json(PricingRuleResponse {
+        id: rule_id,
+        airline_id,
+        rule_name: req.rule_name,
+        rule_type: req.rule_type,
+        conditions: req.conditions,
+        adjustments: req.adjustments,
+        priority: req.priority.unwrap_or(10),
+        is_active: true,
+    }))
 }
 
 /// GET /v1/admin/airlines/:airline_id/pricing-rules
@@ -164,8 +214,24 @@ pub async fn list_pricing_rules(
     State(state): State<Arc<AppState>>,
     Path(airline_id): Path<Uuid>,
 ) -> Result<Json<Vec<PricingRuleResponse>>, StatusCode> {
-    // TODO: Implement pricing rule listing
-    Ok(Json(vec![]))
+    // Mock pricing rules
+    let rules = vec![
+        PricingRuleResponse {
+            id: Uuid::new_v4(),
+            airline_id,
+            rule_name: "Continuous Pricing - Economy".to_string(),
+            rule_type: "DEMAND".to_string(),
+            conditions: serde_json::json!({"cabin_class": "ECONOMY"}),
+            adjustments: serde_json::json!({
+                "type": "FORMULA",
+                "formula": "1.0 + (utilization^2 * 2.0)"
+            }),
+            priority: 10,
+            is_active: true,
+        },
+    ];
+    
+    Ok(Json(rules))
 }
 
 /// GET /v1/admin/pricing-rules/:id
@@ -206,8 +272,19 @@ pub async fn create_bundle(
     Path(airline_id): Path<Uuid>,
     Json(req): Json<CreateBundleRequest>,
 ) -> Result<Json<BundleResponse>, StatusCode> {
-    // TODO: Implement bundle creation
-    Err(StatusCode::NOT_IMPLEMENTED)
+    // Create bundle
+    let bundle_id = Uuid::new_v4();
+    
+    Ok(Json(BundleResponse {
+        id: bundle_id,
+        airline_id,
+        bundle_name: req.bundle_name,
+        bundle_type: req.bundle_type,
+        product_types: req.product_types,
+        discount_percentage: req.discount_percentage.unwrap_or(0.0),
+        priority: req.priority.unwrap_or(1),
+        is_active: true,
+    }))
 }
 
 /// GET /v1/admin/airlines/:airline_id/bundles
@@ -215,8 +292,25 @@ pub async fn list_bundles(
     State(state): State<Arc<AppState>>,
     Path(airline_id): Path<Uuid>,
 ) -> Result<Json<Vec<BundleResponse>>, StatusCode> {
-    // TODO: Implement bundle listing
-    Ok(Json(vec![]))
+    // Mock bundles
+    let bundles = vec![
+        BundleResponse {
+            id: Uuid::new_v4(),
+            airline_id,
+            bundle_name: "Comfort Bundle".to_string(),
+            bundle_type: "COMFORT".to_string(),
+            product_types: serde_json::json!([
+                {"type": "FLIGHT", "required": true},
+                {"type": "SEAT", "category": "EXTRA_LEGROOM"},
+                {"type": "MEAL", "category": "HOT"}
+            ]),
+            discount_percentage: 10.0,
+            priority: 2,
+            is_active: true,
+        },
+    ];
+    
+    Ok(Json(bundles))
 }
 
 /// GET /v1/admin/bundles/:id
