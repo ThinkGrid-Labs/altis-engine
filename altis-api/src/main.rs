@@ -16,12 +16,6 @@ async fn main() {
     let config = altis_store::app_config::load_config().expect("Failed to load config");
     tracing::info!("Starting Altis API on port {}", config.server.port);
 
-    // DB Connection
-    let db = altis_store::DbClient::new(&config.database.url)
-        .await
-        .expect("Failed to connect to database");
-    let db_arc = Arc::new(db);
-
     // Redis Connection
     let redis_client = altis_store::RedisClient::new(&config.redis.url)
         .await
@@ -36,31 +30,11 @@ async fn main() {
     // SSE Broadcast Channel
     let (sse_tx, _) = tokio::sync::broadcast::channel(100);
 
-    // Load Dynamic Business Rules
-    let dynamic_rules = match db_arc.fetch_business_rules(config.business_rules.clone()).await {
-        Ok(rules) => {
-            tracing::info!("Loaded dynamic business rules from DB");
-            rules
-        },
-        Err(e) => {
-            tracing::warn!("Failed to load business rules from DB, using config defaults: {}", e);
-            config.business_rules.clone()
-        }
-    };
-
-    // Repositories
-    let flight_repo = Arc::new(altis_store::PostgresFlightRepository {
-        pool: db_arc.pool.clone(),
-        redis: (*redis_arc).clone(),
-    });
-
     let app_state = AppState {
-        db: db_arc.clone(),
         redis: redis_arc.clone(),
         kafka: kafka_arc,
-        flight_repo,
         sse_tx,
-        business_rules: dynamic_rules,
+        business_rules: config.business_rules.clone(),
         auth: AuthConfig {
             secret: config.auth.jwt_secret.clone(),
             expiration: config.auth.jwt_expiration_seconds,
