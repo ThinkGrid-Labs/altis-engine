@@ -91,11 +91,13 @@ impl OfferGenerator {
             );
             
             let item = OfferItem::new(
-                offer.id,
                 format!("{:?}", flight.product_type),
-                flight.id,
+                Some(flight.id),
+                Some(flight.product_code.clone()),
                 flight.name.clone(),
+                flight.description.clone(),
                 price,
+                1, // quantity
                 flight.metadata.clone(),
             );
             
@@ -151,11 +153,13 @@ impl OfferGenerator {
                 let price = (product.base_price_nuc as f64 * 0.9) as i32;
                 
                 let item = OfferItem::new(
-                    offer.id,
                     format!("{:?}", product.product_type),
-                    product.id,
+                    Some(product.id),
+                    Some(product.product_code.clone()),
                     product.name.clone(),
+                    product.description.clone(),
                     price,
+                    1, // quantity
                     product.metadata.clone(),
                 );
                 

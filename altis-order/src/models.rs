@@ -49,10 +49,15 @@ impl Order {
         Self {
             id: Uuid::new_v4(),
             customer_id,
+            customer_email: None,
+            offer_id: None,
+            airline_id: None,
             items: Vec::new(),
             total_nuc: 0,
             currency: "NUC".to_string(),
             status: OrderStatus::Proposed,
+            payment_method: None,
+            payment_reference: None,
             created_at: now,
             updated_at: now,
         }
