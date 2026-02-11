@@ -5,8 +5,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::sync::Arc;
-
 use crate::state::AppState;
 
 // ============================================================================
@@ -91,7 +89,7 @@ pub struct ListProductsQuery {
 
 /// POST /v1/admin/airlines/:airline_id/products
 pub async fn create_product(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(airline_id): Path<Uuid>,
     Json(req): Json<CreateProductRequest>,
 ) -> Result<Json<ProductResponse>, StatusCode> {
@@ -114,7 +112,7 @@ pub async fn create_product(
 
 /// GET /v1/admin/airlines/:airline_id/products
 pub async fn list_products(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(airline_id): Path<Uuid>,
     Query(query): Query<ListProductsQuery>,
 ) -> Result<Json<Vec<ProductResponse>>, StatusCode> {
@@ -158,7 +156,7 @@ pub async fn list_products(
 
 /// GET /v1/admin/products/:id
 pub async fn get_product(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(product_id): Path<Uuid>,
 ) -> Result<Json<ProductResponse>, StatusCode> {
     // TODO: Implement product retrieval
@@ -167,7 +165,7 @@ pub async fn get_product(
 
 /// PUT /v1/admin/products/:id
 pub async fn update_product(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(product_id): Path<Uuid>,
     Json(req): Json<CreateProductRequest>,
 ) -> Result<Json<ProductResponse>, StatusCode> {
@@ -177,7 +175,7 @@ pub async fn update_product(
 
 /// DELETE /v1/admin/products/:id
 pub async fn delete_product(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(product_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement product deletion (soft delete)
@@ -190,7 +188,7 @@ pub async fn delete_product(
 
 /// POST /v1/admin/airlines/:airline_id/pricing-rules
 pub async fn create_pricing_rule(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(airline_id): Path<Uuid>,
     Json(req): Json<CreatePricingRuleRequest>,
 ) -> Result<Json<PricingRuleResponse>, StatusCode> {
@@ -211,7 +209,7 @@ pub async fn create_pricing_rule(
 
 /// GET /v1/admin/airlines/:airline_id/pricing-rules
 pub async fn list_pricing_rules(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(airline_id): Path<Uuid>,
 ) -> Result<Json<Vec<PricingRuleResponse>>, StatusCode> {
     // Mock pricing rules
@@ -236,7 +234,7 @@ pub async fn list_pricing_rules(
 
 /// GET /v1/admin/pricing-rules/:id
 pub async fn get_pricing_rule(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(rule_id): Path<Uuid>,
 ) -> Result<Json<PricingRuleResponse>, StatusCode> {
     // TODO: Implement pricing rule retrieval
@@ -245,7 +243,7 @@ pub async fn get_pricing_rule(
 
 /// PUT /v1/admin/pricing-rules/:id
 pub async fn update_pricing_rule(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(rule_id): Path<Uuid>,
     Json(req): Json<CreatePricingRuleRequest>,
 ) -> Result<Json<PricingRuleResponse>, StatusCode> {
@@ -255,7 +253,7 @@ pub async fn update_pricing_rule(
 
 /// DELETE /v1/admin/pricing-rules/:id
 pub async fn delete_pricing_rule(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(rule_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement pricing rule deletion
@@ -268,7 +266,7 @@ pub async fn delete_pricing_rule(
 
 /// POST /v1/admin/airlines/:airline_id/bundles
 pub async fn create_bundle(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(airline_id): Path<Uuid>,
     Json(req): Json<CreateBundleRequest>,
 ) -> Result<Json<BundleResponse>, StatusCode> {
@@ -289,7 +287,7 @@ pub async fn create_bundle(
 
 /// GET /v1/admin/airlines/:airline_id/bundles
 pub async fn list_bundles(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(airline_id): Path<Uuid>,
 ) -> Result<Json<Vec<BundleResponse>>, StatusCode> {
     // Mock bundles
@@ -315,7 +313,7 @@ pub async fn list_bundles(
 
 /// GET /v1/admin/bundles/:id
 pub async fn get_bundle(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(bundle_id): Path<Uuid>,
 ) -> Result<Json<BundleResponse>, StatusCode> {
     // TODO: Implement bundle retrieval
@@ -324,7 +322,7 @@ pub async fn get_bundle(
 
 /// PUT /v1/admin/bundles/:id
 pub async fn update_bundle(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(bundle_id): Path<Uuid>,
     Json(req): Json<CreateBundleRequest>,
 ) -> Result<Json<BundleResponse>, StatusCode> {
@@ -334,7 +332,7 @@ pub async fn update_bundle(
 
 /// DELETE /v1/admin/bundles/:id
 pub async fn delete_bundle(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(bundle_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement bundle deletion

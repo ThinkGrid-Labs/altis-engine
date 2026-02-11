@@ -5,8 +5,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::sync::Arc;
-
 use crate::state::AppState;
 
 // ============================================================================
@@ -81,7 +79,7 @@ pub struct BarcodeResponse {
 /// GET /v1/orders/:id
 /// Retrieve order details
 pub async fn get_order(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
     // TODO: Implement order retrieval
@@ -95,7 +93,7 @@ pub async fn get_order(
 /// POST /v1/orders/:id/pay
 /// Pay for an order
 pub async fn pay_order(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
     Json(req): Json<PayOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
@@ -118,7 +116,7 @@ pub async fn pay_order(
 /// POST /v1/orders/:id/customize
 /// Customize order (select seats, meals)
 pub async fn customize_order(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
     Json(req): Json<CustomizeOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
@@ -140,7 +138,7 @@ pub async fn customize_order(
 /// GET /v1/orders/:id/fulfillment
 /// Get fulfillment details (barcodes, QR codes)
 pub async fn get_fulfillment(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
 ) -> Result<Json<FulfillmentResponse>, StatusCode> {
     // Mock fulfillment
@@ -161,7 +159,7 @@ pub async fn get_fulfillment(
 /// POST /v1/orders/:id/cancel
 /// Cancel an order
 pub async fn cancel_order(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement order cancellation
@@ -177,7 +175,7 @@ pub async fn cancel_order(
 /// GET /v1/orders
 /// List customer's orders
 pub async fn list_orders(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
 ) -> Result<Json<Vec<OrderResponse>>, StatusCode> {
     // TODO: Implement order listing
     // 1. Get customer_id from JWT

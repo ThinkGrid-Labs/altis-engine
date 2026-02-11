@@ -5,8 +5,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::sync::Arc;
-
 use crate::state::AppState;
 
 // ============================================================================
@@ -54,7 +52,7 @@ pub struct AcceptOfferRequest {
 /// POST /v1/offers/search
 /// Generate offers based on search criteria
 pub async fn search_offers(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Json(req): Json<SearchOffersRequest>,
 ) -> Result<Json<Vec<OfferResponse>>, StatusCode> {
     // 1. Build search context
@@ -180,7 +178,7 @@ pub async fn search_offers(
 /// GET /v1/offers/:id
 /// Retrieve a specific offer
 pub async fn get_offer(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(offer_id): Path<Uuid>,
 ) -> Result<Json<OfferResponse>, StatusCode> {
     // For now, return NOT_FOUND since we're not persisting offers yet
@@ -195,7 +193,7 @@ pub async fn get_offer(
 /// POST /v1/offers/:id/accept
 /// Accept an offer and create an order
 pub async fn accept_offer(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(offer_id): Path<Uuid>,
     Json(req): Json<AcceptOfferRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -214,7 +212,7 @@ pub async fn accept_offer(
 /// DELETE /v1/offers/:id
 /// Expire an offer (customer cancels)
 pub async fn expire_offer(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(offer_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement offer expiry

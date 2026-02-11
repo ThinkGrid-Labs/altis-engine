@@ -7,6 +7,9 @@ edition = "2021"
 altis-core = { path = "../altis-core" }
 altis-store = { path = "../altis-store" }
 altis-shared = { path = "../altis-shared" }
+altis-offer = { path = "../altis-offer" }
+altis-order = { path = "../altis-order" }
+altis-catalog = { path = "../altis-catalog" }
 tokio = { version = "1.0", features = ["full"] }
 axum = { version = "0.8.8", features = ["macros"] }
 tower = { version = "0.5.3", features = ["util"] }
