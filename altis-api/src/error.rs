@@ -4,16 +4,24 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AppError {
+    #[error("Authentication error: {0}")]
     AuthenticationError(String),
+    #[error("Authorization error: {0}")]
     AuthorizationError(String),
-    validation_error(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    #[error("Not found: {0}")]
     NotFoundError(String),
+    #[error("Conflict: {0}")]
     ConflictError(String),
+    #[error("Internal server error: {0}")]
     InternalServerError(String),
-    Anyhow(anyhow::Error),
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
 
 impl IntoResponse for AppError {
@@ -21,7 +29,7 @@ impl IntoResponse for AppError {
         let (status, error_message) = match self {
             AppError::AuthenticationError(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::AuthorizationError(msg) => (StatusCode::FORBIDDEN, msg),
-            AppError::validation_error(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::NotFoundError(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::ConflictError(msg) => (StatusCode::CONFLICT, msg),
             AppError::InternalServerError(msg) => {
@@ -39,14 +47,5 @@ impl IntoResponse for AppError {
         }));
 
         (status, body).into_response()
-    }
-}
-
-impl<E> From<E> for AppError
-where
-    E: Into<anyhow::Error>,
-{
-    fn from(err: E) -> Self {
-        Self::Anyhow(err.into())
     }
 }

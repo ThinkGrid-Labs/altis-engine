@@ -1,0 +1,19 @@
+[package]
+name = "altis-store"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+altis-core = { path = "../altis-core" }
+altis-shared = { path = "../altis-shared" }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros", "migrate"] }
+redis = { version = "1.0.3", features = ["tokio-comp"] }
+rdkafka = { version = "0.39.0", features = ["cmake-build"] }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+async-trait = "0.1"
+config = "0.15.19"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }

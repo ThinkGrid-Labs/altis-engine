@@ -1,8 +1,11 @@
 [workspace]
 members = [
     "altis-api",
-    "altis-domain",
-    "altis-infra",
-    "altis-proto",
+    "altis-core",
+    "altis-store",
+    "altis-shared",
+    "altis-catalog",
+    "altis-offer",
+    "altis-order",
 ]
 resolver = "2"

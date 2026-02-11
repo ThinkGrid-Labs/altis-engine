@@ -6,7 +6,7 @@ use axum::{
     Router,
     http::StatusCode,
 };
-use altis_domain::search::{FlightSearchRequest, FlightSearchResult};
+use altis_core::search::{FlightSearchRequest, FlightSearchResult};
 use tracing::info;
 use crate::state::AppState;
 

@@ -4,19 +4,24 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-altis-domain = { path = "../altis-domain" }
-altis-infra = { path = "../altis-infra" }
-altis-proto = { path = "../altis-proto" }
+altis-core = { path = "../altis-core" }
+altis-store = { path = "../altis-store" }
+altis-shared = { path = "../altis-shared" }
 tokio = { version = "1.0", features = ["full"] }
-axum = { version = "0.7", features = ["macros"] }
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+axum = { version = "0.8.8", features = ["macros"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.6.8", features = ["cors", "trace"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
 futures-util = "0.3"
-jsonwebtoken = "9.2"
+jsonwebtoken = "10.3.0"
+anyhow = "1.0"
+thiserror = "2.0.18"
+axum-extra = { version = "0.12.5", features = ["typed-header"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros"] }
+rdkafka = { version = "0.39.0", features = ["cmake-build"] }
