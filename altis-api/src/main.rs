@@ -13,7 +13,7 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let config = altis_store::app_config::load_config().expect("Failed to load config");
+    let config = altis_store::app_config::Config::load().expect("Failed to load config");
     tracing::info!("Starting Altis API on port {}", config.server.port);
 
     // Redis Connection
