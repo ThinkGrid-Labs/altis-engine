@@ -13,3 +13,11 @@ brokers = "localhost:9092"
 [auth]
 jwt_secret = "super-secret-key-change-me"
 jwt_expiration_seconds = 86400 # 24 hours
+
+[business_rules]
+trip_hold_seconds = 600
+seat_hold_seconds = 300
+tax_rate = 0.10
+booking_fee = 2.50
+pricing_multiplier = 1.0
+pricing_adjustment = 0.0

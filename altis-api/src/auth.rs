@@ -1,22 +1,15 @@
 use axum::{
     extract::State,
     Json,
-    response::IntoResponse,
+
     routing::post,
     Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::{Utc, Duration};
 use uuid::Uuid;
-use crate::{state::AppState, error::AppError};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    sub: String,
-    role: String,
-    exp: usize,
-}
+use crate::{state::AppState, error::AppError, middleware::auth::CustomerClaims};
 
 #[derive(Debug, Serialize)]
 struct AuthResponse {
@@ -28,9 +21,10 @@ pub fn routes() -> Router<AppState> {
 }
 
 async fn login_guest(State(state): State<AppState>) -> Result<Json<AuthResponse>, AppError> {
-    let my_claims = Claims {
+    let my_claims = CustomerClaims {
         sub: format!("guest-{}", Uuid::new_v4()),
-        role: "guest".to_owned(),
+        email: None,
+        role: "GUEST".to_owned(),
         exp: (Utc::now() + Duration::seconds(state.auth.expiration as i64)).timestamp() as usize,
     };
 

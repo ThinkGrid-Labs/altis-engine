@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package ranking;
+
+// Service for ranking offers based on conversion probability
+service RankingService {
+    // Predict conversion probability for a set of offers
+    rpc PredictConversion (PredictConversionRequest) returns (PredictConversionResponse);
+}
+
+// Request to predict conversion
+message PredictConversionRequest {
+    UserContext user_context = 1;
+    SearchContext search_context = 2;
+    OfferFeatures offer_features = 3;
+}
+
+// User-specific information
+message UserContext {
+    string user_id = 1;         // customer_id if logged in
+    bool is_guest = 2;         // Whether the user is anonymous
+    string session_id = 3;      // For cross-session tracking
+}
+
+// Context of the search
+message SearchContext {
+    string origin = 1;
+    string destination = 2;
+    string departure_date = 3;
+    int32 passengers = 4;
+    string cabin_class = 5;
+}
+
+// Features of a specific offer
+message OfferFeatures {
+    string offer_id = 1;
+    int32 total_price_nuc = 2;
+    repeated string product_codes = 3;
+    float discount_percentage = 4;
+}
+
+// Response from the ranking service
+message PredictConversionResponse {
+    double probability = 1;     // 0.0 to 1.0
+}

@@ -2,7 +2,13 @@ version: '3.8'
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+      - /app/target
+      - ./config:/app/config
     ports:
       - "8080:8080"
     depends_on:
@@ -12,6 +18,8 @@ services:
     environment:
       # Override config for Docker networking
       ALTIS__DATABASE__URL: postgres://altis:password@postgres:5432/altis
+      # Required for sqlx macros to work at compile time
+      DATABASE_URL: postgres://altis:password@postgres:5432/altis
       ALTIS__REDIS__URL: redis://redis:6379
       ALTIS__KAFKA__BROKERS: kafka:29092
     restart: on-failure

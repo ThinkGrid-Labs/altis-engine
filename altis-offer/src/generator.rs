@@ -1,6 +1,5 @@
 use crate::models::{Offer, OfferItem};
-use altis_catalog::{Product, ProductType, PricingContext, PricingEngine};
-use uuid::Uuid;
+use altis_catalog::{Product, ProductType, PricingEngine};
 
 /// Offer generation strategies
 pub enum OfferStrategy {

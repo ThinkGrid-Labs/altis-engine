@@ -14,6 +14,10 @@ impl RedisClient {
         Ok(Self { client })
     }
 
+    pub fn get_client(&self) -> redis::Client {
+        self.client.clone()
+    }
+
     pub async fn set_trip_hold(&self, trip_id: &str, flight_id: &str, ttl_seconds: u64) -> Result<(), redis::RedisError> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let key = format!("trip:{}", trip_id);

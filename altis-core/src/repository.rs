@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
+
 
 use crate::search::FlightSearchResult;
 
@@ -73,6 +72,14 @@ pub trait OrderRepository: Send + Sync {
         &self,
         customer_id: &str,
     ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn create_fulfillment(
+        &self,
+        order_id: Uuid,
+        order_item_id: Uuid,
+        fulfillment_type: &str,
+        barcode: &str,
+    ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Generic repository trait for product catalog access

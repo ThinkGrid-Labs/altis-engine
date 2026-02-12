@@ -171,10 +171,25 @@ curl http://localhost:8080/health
 
 ## 📖 API Usage
 
-### 1. Search for Offers
+### 1. Authentication (Required)
+
+All API endpoints (except `/health` and `/v1/auth/guest`) require a JWT token.
+
+**Step 1: Get a Guest Token**
+```bash
+curl -X POST http://localhost:8080/v1/auth/guest \
+  -H "Content-Type: application/json"
+# {"token": "eyJhbGciOiJIUzI1Ni..."}
+```
+
+**Step 2: Use Token in Requests**
+Add the header `Authorization: Bearer <token>` to all subsequent requests.
+
+### 2. Search for Offers
 
 ```bash
 curl -X POST http://localhost:8080/v1/offers/search \
+  -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
   -d '{
     "origin": "JFK",
@@ -186,7 +201,7 @@ curl -X POST http://localhost:8080/v1/offers/search \
 
 **Response**: 3-5 ranked offers with different bundles
 
-### 2. Accept an Offer
+### 3. Accept an Offer
 
 ```bash
 curl -X POST http://localhost:8080/v1/offers/{offer_id}/accept \
@@ -199,7 +214,7 @@ curl -X POST http://localhost:8080/v1/offers/{offer_id}/accept \
 
 **Response**: Order created with `PROPOSED` status
 
-### 3. Complete Payment
+### 4. Complete Payment
 
 ```bash
 curl -X POST http://localhost:8080/v1/orders/{order_id}/pay \
@@ -212,7 +227,7 @@ curl -X POST http://localhost:8080/v1/orders/{order_id}/pay \
 
 **Response**: Order status → `PAID`, fulfillment barcodes generated
 
-### 4. Get Order Details
+### 5. Get Order Details
 
 ```bash
 curl http://localhost:8080/v1/orders/{order_id} \
@@ -221,7 +236,7 @@ curl http://localhost:8080/v1/orders/{order_id} \
 
 **Response**: Full order with items, status, and fulfillment
 
-### 5. Modify Order (Change Flight)
+### 6. Modify Order (Change Flight)
 
 ```bash
 curl -X POST http://localhost:8080/v1/orders/{order_id}/modify \

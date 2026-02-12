@@ -38,6 +38,11 @@ An **Offer** is a temporary, AI-generated bundle of products presented to a cust
 - **Fresh pricing**: Ensures prices reflect current demand
 - **Conversion urgency**: Creates psychological pressure to book
 
+### Price Locking
+To align with the IATA vision, the Offer ID acts as a **guaranteed price quote**. If a product price changes system-wide (e.g., a "Flash Sale" ends), any customer who generated an offer *during* the sale is protected. 
+
+As long as the offer is accepted before `expires_at`, the transaction is settled at the price recorded in the Offer, not the current market price. This eliminates "price jumps" during the checkout experience.
+
 ---
 
 ## What is an Order?

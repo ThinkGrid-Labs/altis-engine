@@ -1,6 +1,6 @@
 extern crate altis_core;
 use axum::{
-    routing::{get, post, put, delete},
+    routing::{get, post},
     Router,
     http::Method,
     extract::State,
@@ -25,26 +25,30 @@ pub use state::AppState;
 // Customer-Facing Routes (/v1/*)
 // ============================================================================
 
-fn customer_routes() -> Router<AppState> {
+fn customer_routes(state: AppState) -> Router<AppState> {
+    let auth_routes = Router::new().nest("/auth", auth::routes());
+    let public_search = search::routes(); // Keep search public? User said "this token use to search offers". So search needs token.
+    
     Router::new()
-        // Authentication
-        .merge(auth::routes())
-        
-        // Flight Search
-        .merge(search::routes())
-        
-        // Offers
-        .route("/offers/search", post(offers::search_offers))
-        .route("/offers/:id", get(offers::get_offer).delete(offers::expire_offer))
-        .route("/offers/:id/accept", post(offers::accept_offer))
-        
-        // Orders
-        .route("/orders", get(orders::list_orders))
-        .route("/orders/:id", get(orders::get_order))
-        .route("/orders/:id/pay", post(orders::pay_order))
-        .route("/orders/:id/customize", post(orders::customize_order))
-        .route("/orders/:id/fulfillment", get(orders::get_fulfillment))
-        .route("/orders/:id/cancel", post(orders::cancel_order))
+        .merge(auth_routes)
+        // Protected Routes (Offers, Orders, Search)
+        .merge(
+            Router::new()
+                .merge(public_search) // Request: "this token use to search offers". So search MUST be protected.
+                // Offers
+                .route("/offers/search", post(offers::search_offers))
+                .route("/offers/{id}", get(offers::get_offer).delete(offers::expire_offer))
+                .route("/offers/{id}/accept", post(offers::accept_offer))
+                
+                // Orders
+                .route("/orders", get(orders::list_orders))
+                .route("/orders/{id}", get(orders::get_order))
+                .route("/orders/{id}/pay", post(orders::pay_order))
+                .route("/orders/{id}/customize", post(orders::customize_order))
+                .route("/orders/{id}/fulfillment", get(orders::get_fulfillment))
+                .route("/orders/{id}/cancel", post(orders::cancel_order))
+                .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware::auth::customer_auth_middleware))
+        )
 }
 
 // ============================================================================
@@ -54,16 +58,16 @@ fn customer_routes() -> Router<AppState> {
 fn admin_routes() -> Router<AppState> {
     Router::new()
         // Product Management
-        .route("/airlines/:airline_id/products", get(admin::list_products).post(admin::create_product))
-        .route("/products/:id", get(admin::get_product).put(admin::update_product).delete(admin::delete_product))
+        .route("/airlines/{airline_id}/products", get(admin::list_products).post(admin::create_product))
+        .route("/products/{id}", get(admin::get_product).put(admin::update_product).delete(admin::delete_product))
         
         // Pricing Rules
-        .route("/airlines/:airline_id/pricing-rules", get(admin::list_pricing_rules).post(admin::create_pricing_rule))
-        .route("/pricing-rules/:id", get(admin::get_pricing_rule).put(admin::update_pricing_rule).delete(admin::delete_pricing_rule))
+        .route("/airlines/{airline_id}/pricing-rules", get(admin::list_pricing_rules).post(admin::create_pricing_rule))
+        .route("/pricing-rules/{id}", get(admin::get_pricing_rule).put(admin::update_pricing_rule).delete(admin::delete_pricing_rule))
         
         // Bundle Templates
-        .route("/airlines/:airline_id/bundles", get(admin::list_bundles).post(admin::create_bundle))
-        .route("/bundles/:id", get(admin::get_bundle).put(admin::update_bundle).delete(admin::delete_bundle))
+        .route("/airlines/{airline_id}/bundles", get(admin::list_bundles).post(admin::create_bundle))
+        .route("/bundles/{id}", get(admin::get_bundle).put(admin::update_bundle).delete(admin::delete_bundle))
 }
 
 // ============================================================================
@@ -83,7 +87,7 @@ pub fn app(state: AppState) -> Router {
 
     Router::new()
         // Customer routes at /v1/*
-        .nest("/v1", customer_routes())
+        .nest("/v1", customer_routes(state.clone()))
         
         // Admin routes at /v1/admin/*
         .nest("/v1/admin", admin_routes())

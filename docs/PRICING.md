@@ -129,6 +129,19 @@ if context.is_bundled {
 }
 ```
 
+### 5. Rule-Based Exceptions (Flash Sales)
+
+Airlines can override continuous pricing algorithms for specific retail campaigns.
+
+```rust
+// Example: LLC Flash Sale for PHX-SFO route
+if route == "PHX-SFO" && is_sale_active {
+    price = 5000; // Fixed $50.00 base fare
+}
+```
+
+This is handled by the `PricingRepo` which evaluates a list of active `PricingRule` entities before the continuous pricing multipliers are applied.
+
 ---
 
 ## Pricing Context

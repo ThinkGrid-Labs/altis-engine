@@ -25,6 +25,7 @@ pub struct Offer {
     pub status: OfferStatus,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub metadata: serde_json::Value,
 }
 
 impl Offer {
@@ -42,6 +43,7 @@ impl Offer {
             status: OfferStatus::Active,
             expires_at: now + chrono::Duration::minutes(15),
             created_at: now,
+            metadata: serde_json::json!({}),
         }
     }
     

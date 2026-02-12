@@ -2,13 +2,12 @@ use axum::{
     extract::{Request, State},
     middleware::Next,
     response::Response,
-    http::StatusCode,
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{state::AppState, error::AppError};
 
 // ============================================================================
 // JWT Claims
@@ -17,7 +16,7 @@ use crate::state::AppState;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomerClaims {
     pub sub: String,
-    pub email: String,
+    pub email: Option<String>,
     pub role: String,
     pub exp: usize,
 }
@@ -40,27 +39,27 @@ pub async fn customer_auth_middleware(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     // 1. Extract token from Authorization header
     let auth_header = req.headers()
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or(AppError::AuthenticationError("Missing or invalid Authorization header".to_string()))?;
     
     let token = auth_header
         .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or(AppError::AuthenticationError("Invalid token format".to_string()))?;
     
     // 2. Decode and validate JWT
     let token_data = decode::<CustomerClaims>(
         token,
         &DecodingKey::from_secret(state.auth.secret.as_bytes()),
         &Validation::default(),
-    ).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    ).map_err(|_| AppError::AuthenticationError("Invalid or expired token".to_string()))?;
     
-    // 3. Check role is CUSTOMER
-    if token_data.claims.role != "CUSTOMER" {
-        return Err(StatusCode::FORBIDDEN);
+    // 3. Check role is CUSTOMER or GUEST
+    if token_data.claims.role != "CUSTOMER" && token_data.claims.role != "GUEST" {
+        return Err(AppError::AuthorizationError("Insufficient permissions".to_string()));
     }
     
     // 4. Inject claims into request extensions
@@ -77,27 +76,27 @@ pub async fn admin_auth_middleware(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     // 1. Extract token
     let auth_header = req.headers()
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or(AppError::AuthenticationError("Missing or invalid Authorization header".to_string()))?;
     
     let token = auth_header
         .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or(AppError::AuthenticationError("Invalid token format".to_string()))?;
     
     // 2. Decode JWT
     let token_data = decode::<AdminClaims>(
         token,
         &DecodingKey::from_secret(state.auth.secret.as_bytes()),
         &Validation::default(),
-    ).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    ).map_err(|_| AppError::AuthenticationError("Invalid or expired token".to_string()))?;
     
     // 3. Check role is ADMIN or SUPER_ADMIN
     if token_data.claims.role != "ADMIN" && token_data.claims.role != "SUPER_ADMIN" {
-        return Err(StatusCode::FORBIDDEN);
+        return Err(AppError::AuthorizationError("Insufficient permissions".to_string()));
     }
     
     // 4. Inject claims

@@ -56,105 +56,95 @@ pub async fn search_offers(
     Json(req): Json<SearchOffersRequest>,
 ) -> Result<Json<Vec<OfferResponse>>, StatusCode> {
     // 1. Build search context
-    let search_context = serde_json::json!({
-        "origin": req.origin,
-        "destination": req.destination,
-        "departure_date": req.departure_date,
-        "return_date": req.return_date,
-        "passengers": req.passengers,
-        "cabin_class": req.cabin_class,
-    });
+    let domain_context = altis_offer::features::SearchContext {
+        origin: req.origin.clone(),
+        destination: req.destination.clone(),
+        departure_date: req.departure_date.clone(),
+        passengers: req.passengers as i32,
+        cabin_class: req.cabin_class.clone(),
+    };
+
+    let search_context_json = serde_json::to_value(&domain_context).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    // 2. Generate offers (Flight-Only, Comfort, Premium)
+    // 2. Fetch products from catalog
+    // For now, we fetch AA products as a default if no specific airline is in context
+    let airline_id = Uuid::nil(); // TODO: Determine airline from route/config
+    let products = state.catalog_repo.list_products(airline_id, None).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Helper to find product by code
+    let find_product = |code: &str| {
+        products.iter().find(|p| p["product_code"].as_str() == Some(code))
+    };
+
+    // 3. Generate offers (Flight-Only, Comfort, Premium)
     let mut offers = Vec::new();
     
-    // Flight-Only offer (baseline)
-    let mut flight_only = altis_offer::Offer::new(None, None, search_context.clone());
+    // Flight-Only offer
+    let mut flight_only = altis_offer::Offer::new(None, Some(airline_id), search_context_json.clone());
     flight_only.add_item(altis_offer::OfferItem::new(
         "FLIGHT".to_string(),
         None,
         Some("FLIGHT-BASE".to_string()),
         format!("{} to {}", req.origin, req.destination),
         Some(format!("Direct flight on {}", req.departure_date)),
-        20000, // Base price: 200 NUC
+        20000, 
         req.passengers as i32,
-        serde_json::json!({
-            "origin": req.origin,
-            "destination": req.destination,
-            "date": req.departure_date,
-        }),
+        serde_json::json!({"origin": req.origin, "destination": req.destination}),
     ));
     offers.push(flight_only);
     
-    // Comfort Bundle (Flight + Seat + Meal with 10% discount)
-    let mut comfort = altis_offer::Offer::new(None, None, search_context.clone());
+    // Comfort Bundle
+    let mut comfort = altis_offer::Offer::new(None, Some(airline_id), search_context_json.clone());
     comfort.add_item(altis_offer::OfferItem::new(
         "FLIGHT".to_string(),
         None,
         Some("FLIGHT-BASE".to_string()),
         format!("{} to {}", req.origin, req.destination),
-        Some(format!("Direct flight on {}", req.departure_date)),
+        None,
         20000,
         req.passengers as i32,
-        serde_json::json!({"origin": req.origin, "destination": req.destination}),
+        serde_json::json!({}),
     ));
-    comfort.add_item(altis_offer::OfferItem::new(
-        "SEAT".to_string(),
-        None,
-        Some("SEAT-EXTRA-LEG".to_string()),
-        "Extra Legroom Seat".to_string(),
-        Some("34-36 inches of legroom".to_string()),
-        2700, // 3000 NUC with 10% discount
-        req.passengers as i32,
-        serde_json::json!({"category": "EXTRA_LEGROOM"}),
-    ));
-    comfort.add_item(altis_offer::OfferItem::new(
-        "MEAL".to_string(),
-        None,
-        Some("MEAL-HOT".to_string()),
-        "Hot Meal".to_string(),
-        Some("Chef-prepared hot meal".to_string()),
-        1350, // 1500 NUC with 10% discount
-        req.passengers as i32,
-        serde_json::json!({"category": "HOT"}),
-    ));
+    
+    if let Some(seat) = find_product("SEAT-EXTRA-LEG") {
+        comfort.add_item(altis_offer::OfferItem::new(
+            "SEAT".to_string(),
+            None,
+            Some("SEAT-EXTRA-LEG".to_string()),
+            seat["name"].as_str().unwrap_or("Seat").to_string(),
+            seat["description"].as_str().map(|s| s.to_string()),
+            (seat["base_price_nuc"].as_i64().unwrap_or(3000) as f64 * 0.9) as i32,
+            req.passengers as i32,
+            seat["metadata"].clone(),
+        ));
+    }
+
+    if let Some(meal) = find_product("MEAL-HOT") {
+        comfort.add_item(altis_offer::OfferItem::new(
+            "MEAL".to_string(),
+            None,
+            Some("MEAL-HOT".to_string()),
+            meal["name"].as_str().unwrap_or("Meal").to_string(),
+            meal["description"].as_str().map(|s| s.to_string()),
+            (meal["base_price_nuc"].as_i64().unwrap_or(1500) as f64 * 0.9) as i32,
+            req.passengers as i32,
+            meal["metadata"].clone(),
+        ));
+    }
     offers.push(comfort);
     
-    // Premium Bundle (Flight + Lounge + Fast Track)
-    let mut premium = altis_offer::Offer::new(None, None, search_context.clone());
-    premium.add_item(altis_offer::OfferItem::new(
-        "FLIGHT".to_string(),
-        None,
-        Some("FLIGHT-BASE".to_string()),
-        format!("{} to {}", req.origin, req.destination),
-        Some(format!("Direct flight on {}", req.departure_date)),
-        20000,
-        req.passengers as i32,
-        serde_json::json!({"origin": req.origin, "destination": req.destination}),
-    ));
-    premium.add_item(altis_offer::OfferItem::new(
-        "LOUNGE".to_string(),
-        None,
-        Some("LOUNGE-ACCESS".to_string()),
-        "Airport Lounge Access".to_string(),
-        Some("Premium lounge with food and drinks".to_string()),
-        4250, // 5000 NUC with 15% discount
-        req.passengers as i32,
-        serde_json::json!({"category": "PREMIUM"}),
-    ));
-    premium.add_item(altis_offer::OfferItem::new(
-        "FAST_TRACK".to_string(),
-        None,
-        Some("FAST-TRACK".to_string()),
-        "Fast Track Security".to_string(),
-        Some("Skip the security line".to_string()),
-        1700, // 2000 NUC with 15% discount
-        req.passengers as i32,
-        serde_json::json!({"category": "PREMIUM"}),
-    ));
-    offers.push(premium);
+    // 4. AI Ranking
+    let mut ranker = state.ranker.lock().await;
+    ranker.rank_offers_with_context(&domain_context, &mut offers).await;
     
-    // 3. Convert to response format
+    // 5. Save generated offers to repository (for retrieval on accept)
+    for offer in &offers {
+        let val = serde_json::to_value(offer).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.offer_repo.save_offer(&val).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    // 6. Convert to response format
     let responses: Vec<OfferResponse> = offers.into_iter()
         .map(|offer| OfferResponse {
             id: offer.id,
@@ -181,13 +171,33 @@ pub async fn get_offer(
     State(state): State<AppState>,
     Path(offer_id): Path<Uuid>,
 ) -> Result<Json<OfferResponse>, StatusCode> {
-    // For now, return NOT_FOUND since we're not persisting offers yet
-    // In full implementation, this would:
-    // 1. Check Redis cache first
-    // 2. Fall back to database
-    // 3. Verify not expired
+    let offer_json = state.offer_repo.get_offer(offer_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let offer: altis_offer::Offer = serde_json::from_value(offer_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if offer.is_expired() {
+        return Err(StatusCode::GONE);
+    }
+
+    let response = OfferResponse {
+        id: offer.id,
+        items: offer.items.iter().map(|item| OfferItemResponse {
+            id: item.id,
+            product_type: item.product_type.clone(),
+            name: item.name.clone(),
+            description: item.description.clone(),
+            price_nuc: item.price_nuc,
+            metadata: item.metadata.clone(),
+        }).collect(),
+        total_nuc: offer.total_nuc,
+        currency: offer.currency.clone(),
+        expires_at: offer.expires_at,
+    };
     
-    Err(StatusCode::NOT_FOUND)
+    Ok(Json(response))
 }
 
 /// POST /v1/offers/:id/accept
@@ -197,10 +207,38 @@ pub async fn accept_offer(
     Path(offer_id): Path<Uuid>,
     Json(req): Json<AcceptOfferRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // Create a new order in PROPOSED status
-    let order_id = Uuid::new_v4();
+    // 1. Get offer to verify and log
+    let offer_json = state.offer_repo.get_offer(offer_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let offer: altis_offer::Offer = serde_json::from_value(offer_json.clone())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 2. Log Telemetry
+    let _ = state.telemetry.log_offer_accepted(altis_shared::models::events::OfferAcceptedEvent {
+        offer_id,
+        customer_id: Some(req.customer_email.clone()),
+        timestamp: chrono::Utc::now().timestamp(),
+    }).await;
+
+    // 3. Create Order
+    let order_id = state.order_repo.create_order(&serde_json::json!({
+        "customer_id": req.customer_email,
+        "customer_email": req.customer_email,
+        "offer_id": offer_id,
+        "status": "PROPOSED",
+        "total_nuc": offer.total_nuc,
+        "currency": offer.currency,
+    })).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 4. Add Order Items
+    for item in &offer.items {
+        let _ = state.order_repo.add_order_item(order_id, &serde_json::to_value(item).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?).await;
+    }
     
-    // Return order details
+    // 5. Release/Update offer status (optional, usually done by expiry or order link)
+    
     Ok(Json(serde_json::json!({
         "order_id": order_id,
         "status": "PROPOSED",
@@ -212,8 +250,8 @@ pub async fn accept_offer(
 /// DELETE /v1/offers/:id
 /// Expire an offer (customer cancels)
 pub async fn expire_offer(
-    State(state): State<AppState>,
-    Path(offer_id): Path<Uuid>,
+    State(_state): State<AppState>,
+    Path(_offer_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement offer expiry
     // 1. Mark offer as EXPIRED in database

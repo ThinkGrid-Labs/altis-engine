@@ -1,10 +1,9 @@
 use axum::{
     extract::State,
     Json,
-    response::IntoResponse,
     routing::post,
     Router,
-    http::StatusCode,
+
 };
 use altis_core::search::{FlightSearchRequest, FlightSearchResult};
 use tracing::info;

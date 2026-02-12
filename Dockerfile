@@ -1,5 +1,12 @@
 # Builder stage
-FROM rust:latest AS builder
+FROM rust:bookworm AS dev
+WORKDIR /app
+RUN apt-get update && apt-get install -y cmake build-essential && rm -rf /var/lib/apt/lists/*
+RUN cargo install cargo-watch
+COPY . .
+CMD ["cargo", "watch", "-x", "run"]
+
+FROM rust:bookworm AS builder
 
 WORKDIR /app
 
@@ -12,7 +19,7 @@ COPY . .
 RUN cargo build --release --bin altis-api
 
 # Runtime stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 WORKDIR /app
 

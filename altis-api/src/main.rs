@@ -30,8 +30,26 @@ async fn main() {
     // SSE Broadcast Channel
     let (sse_tx, _) = tokio::sync::broadcast::channel(100);
 
+    // Database Pool
+    let pool = sqlx::PgPool::connect(&config.database.url)
+        .await
+        .expect("Failed to connect to Postgres");
+
+    // Repositories
+    let offer_repo = Arc::new(altis_store::StoreOfferRepository::new(pool.clone(), Arc::new(redis_arc.get_client())));
+    let order_repo = Arc::new(altis_store::StoreOrderRepository::new(pool.clone()));
+    let catalog_repo = Arc::new(altis_store::StoreProductRepository::new(pool.clone()));
+
+    // AI/Telemetry
+    let telemetry = Arc::new(altis_offer::events::OfferTelemetry::new(&config.kafka.brokers, "offers"));
+    let ranker = Arc::new(tokio::sync::Mutex::new(altis_offer::ai_ranker::OfferRanker::new(
+        altis_offer::ai_ranker::RankingConfig::default(),
+        Some(telemetry.clone()),
+        None, // TODO: Initialize gRPC client when available
+    )));
+
     let app_state = AppState {
-        redis: redis_arc.clone(),
+        redis: redis_arc,
         kafka: kafka_arc,
         sse_tx,
         business_rules: config.business_rules.clone(),
@@ -39,6 +57,11 @@ async fn main() {
             secret: config.auth.jwt_secret.clone(),
             expiration: config.auth.jwt_expiration_seconds,
         },
+        offer_repo,
+        order_repo,
+        catalog_repo,
+        telemetry,
+        ranker,
     };
 
     let app = app(app_state);

@@ -11,7 +11,7 @@ use crate::state::AppState;
 // Request/Response Types
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OrderResponse {
     pub id: Uuid,
     pub customer_id: String,
@@ -23,7 +23,7 @@ pub struct OrderResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemResponse {
     pub id: Uuid,
     pub product_type: String,
@@ -59,13 +59,13 @@ pub struct MealSelection {
     pub meal_code: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FulfillmentResponse {
     pub order_id: Uuid,
     pub barcodes: Vec<BarcodeResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BarcodeResponse {
     pub item_id: Uuid,
     pub barcode: String,
@@ -82,12 +82,14 @@ pub async fn get_order(
     State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
-    // TODO: Implement order retrieval
-    // 1. Fetch order from database
-    // 2. Verify customer owns this order (from JWT)
-    // 3. Return order details
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let response: OrderResponse = serde_json::from_value(order_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    Err(StatusCode::NOT_FOUND)
+    Ok(Json(response))
 }
 
 /// POST /v1/orders/:id/pay
@@ -97,20 +99,27 @@ pub async fn pay_order(
     Path(order_id): Path<Uuid>,
     Json(req): Json<PayOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
-    // Mock payment processing
-    // In production, this would integrate with Stripe, PayPal, etc.
-    
-    // Return updated order
-    Ok(Json(OrderResponse {
-        id: order_id,
-        customer_id: "customer-123".to_string(),
-        customer_email: Some("customer@example.com".to_string()),
-        status: "PAID".to_string(),
-        items: vec![],
-        total_nuc: 24050,
-        currency: "NUC".to_string(),
-        created_at: chrono::Utc::now(),
-    }))
+    // 1. Get order to verify exists
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let mut order: OrderResponse = serde_json::from_value(order_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 2. Process pay (Mock payment logic, but update DB status)
+    state.order_repo.update_order_status(order_id, "PAID").await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 3. Generate fulfillment records (barcodes) for each item
+    for item in &order.items {
+        let barcode = format!("ALTIS-{}-{}", order_id.simple(), item.id.simple());
+        let _ = state.order_repo.create_fulfillment(order_id, item.id, "BARCODE", &barcode).await;
+    }
+
+    // 4. Return updated order
+    order.status = "PAID".to_string();
+    Ok(Json(order))
 }
 
 /// POST /v1/orders/:id/customize
@@ -120,19 +129,17 @@ pub async fn customize_order(
     Path(order_id): Path<Uuid>,
     Json(req): Json<CustomizeOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
-    // Mock customization
-    // In production, this would hold seats in Redis and update order metadata
+    // Mock customization logic (metadata updates)
+    // In production, this would update item metadata in order_items table
     
-    Ok(Json(OrderResponse {
-        id: order_id,
-        customer_id: "customer-123".to_string(),
-        customer_email: Some("customer@example.com".to_string()),
-        status: "PROPOSED".to_string(),
-        items: vec![],
-        total_nuc: 24050,
-        currency: "NUC".to_string(),
-        created_at: chrono::Utc::now(),
-    }))
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let response: OrderResponse = serde_json::from_value(order_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(Json(response))
 }
 
 /// GET /v1/orders/:id/fulfillment
@@ -141,26 +148,32 @@ pub async fn get_fulfillment(
     State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
 ) -> Result<Json<FulfillmentResponse>, StatusCode> {
-    // Mock fulfillment
-    // In production, this would fetch from fulfillment table
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Extraction: In the real repo, get_order returns fulfillment as a field
+    let barcodes = if let Some(fulfillment) = order_json["fulfillment"].as_array() {
+        fulfillment.iter().map(|f| BarcodeResponse {
+            item_id: Uuid::parse_str(f["order_item_id"].as_str().unwrap_or_default()).unwrap_or_default(),
+            barcode: f["barcode"].as_str().unwrap_or_default().to_string(),
+            qr_code_url: Some(format!("https://api.altis.com/qr/{}", f["barcode"].as_str().unwrap_or_default())),
+        }).collect()
+    } else {
+        vec![]
+    };
     
     Ok(Json(FulfillmentResponse {
         order_id,
-        barcodes: vec![
-            BarcodeResponse {
-                item_id: Uuid::new_v4(),
-                barcode: format!("ALTIS-{}-FLIGHT", order_id.simple()),
-                qr_code_url: Some(format!("https://api.altis.com/qr/{}", order_id)),
-            },
-        ],
+        barcodes,
     }))
 }
 
 /// POST /v1/orders/:id/cancel
 /// Cancel an order
 pub async fn cancel_order(
-    State(state): State<AppState>,
-    Path(order_id): Path<Uuid>,
+    State(_state): State<AppState>,
+    Path(_order_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement order cancellation
     // 1. Verify order can be cancelled (not already fulfilled)
@@ -177,10 +190,14 @@ pub async fn cancel_order(
 pub async fn list_orders(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<OrderResponse>>, StatusCode> {
-    // TODO: Implement order listing
-    // 1. Get customer_id from JWT
-    // 2. Fetch all orders for customer
-    // 3. Return paginated list
+    // For now, list all orders since we don't have full JWT user context yet
+    // In production, this would use customer_id from token
+    let orders_json = state.order_repo.list_orders("").await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    Ok(Json(vec![]))
+    let responses: Vec<OrderResponse> = orders_json.into_iter()
+        .filter_map(|val| serde_json::from_value(val).ok())
+        .collect();
+    
+    Ok(Json(responses))
 }
