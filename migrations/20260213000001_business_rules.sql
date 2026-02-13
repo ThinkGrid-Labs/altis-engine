@@ -5,7 +5,7 @@
 -- 1. AIRLINES
 -- ============================================================================
 
-CREATE TABLE airlines (
+CREATE TABLE IF NOT EXISTS airlines (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(3) UNIQUE NOT NULL,  -- IATA code: 'AA', 'UA', 'BA'
     name VARCHAR(255) NOT NULL,
@@ -15,14 +15,14 @@ CREATE TABLE airlines (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_airlines_code ON airlines(code);
-CREATE INDEX idx_airlines_status ON airlines(status);
+CREATE INDEX IF NOT EXISTS idx_airlines_code ON airlines(code);
+CREATE INDEX IF NOT EXISTS idx_airlines_status ON airlines(status);
 
 -- ============================================================================
 -- 2. BUSINESS RULES (Generic)
 -- ============================================================================
 
-CREATE TABLE business_rules (
+CREATE TABLE IF NOT EXISTS business_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id) ON DELETE CASCADE,
     rule_type VARCHAR(50) NOT NULL,  -- 'PRICING', 'BUNDLING', 'INVENTORY', 'OFFER'
@@ -36,16 +36,16 @@ CREATE TABLE business_rules (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_business_rules_airline ON business_rules(airline_id);
-CREATE INDEX idx_business_rules_type ON business_rules(rule_type);
-CREATE INDEX idx_business_rules_active ON business_rules(is_active, airline_id);
-CREATE INDEX idx_business_rules_validity ON business_rules(valid_from, valid_until);
+CREATE INDEX IF NOT EXISTS idx_business_rules_airline ON business_rules(airline_id);
+CREATE INDEX IF NOT EXISTS idx_business_rules_type ON business_rules(rule_type);
+CREATE INDEX IF NOT EXISTS idx_business_rules_active ON business_rules(is_active, airline_id);
+CREATE INDEX IF NOT EXISTS idx_business_rules_validity ON business_rules(valid_from, valid_until);
 
 -- ============================================================================
 -- 3. PRODUCTS (Airline-Specific Catalog)
 -- ============================================================================
 
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id) ON DELETE CASCADE,
     product_type VARCHAR(50) NOT NULL,  -- 'FLIGHT', 'SEAT', 'MEAL', 'BAG', 'LOUNGE', etc.
@@ -61,9 +61,9 @@ CREATE TABLE products (
     UNIQUE(airline_id, product_code)
 );
 
-CREATE INDEX idx_products_airline ON products(airline_id);
-CREATE INDEX idx_products_type ON products(product_type);
-CREATE INDEX idx_products_active ON products(is_active, airline_id);
+CREATE INDEX IF NOT EXISTS idx_products_airline ON products(airline_id);
+CREATE INDEX IF NOT EXISTS idx_products_type ON products(product_type);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active, airline_id);
 
 -- Example product metadata:
 -- SEAT: {"category": "EXTRA_LEGROOM", "legroom_inches": 35, "available_rows": [12,13,14]}
@@ -74,7 +74,7 @@ CREATE INDEX idx_products_active ON products(is_active, airline_id);
 -- 4. PRICING RULES (Specific)
 -- ============================================================================
 
-CREATE TABLE pricing_rules (
+CREATE TABLE IF NOT EXISTS pricing_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE CASCADE,
@@ -88,10 +88,10 @@ CREATE TABLE pricing_rules (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_pricing_rules_airline ON pricing_rules(airline_id);
-CREATE INDEX idx_pricing_rules_product ON pricing_rules(product_id);
-CREATE INDEX idx_pricing_rules_type ON pricing_rules(rule_type);
-CREATE INDEX idx_pricing_rules_active ON pricing_rules(is_active, airline_id);
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_airline ON pricing_rules(airline_id);
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_product ON pricing_rules(product_id);
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_type ON pricing_rules(rule_type);
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_active ON pricing_rules(is_active, airline_id);
 
 -- Example conditions:
 -- {"product_type": "FLIGHT", "cabin_class": "ECONOMY", "utilization": {"min": 0.7}}
@@ -107,7 +107,7 @@ CREATE INDEX idx_pricing_rules_active ON pricing_rules(is_active, airline_id);
 -- 5. BUNDLE TEMPLATES
 -- ============================================================================
 
-CREATE TABLE bundle_templates (
+CREATE TABLE IF NOT EXISTS bundle_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id) ON DELETE CASCADE,
     bundle_name VARCHAR(100) NOT NULL,
@@ -120,9 +120,9 @@ CREATE TABLE bundle_templates (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_bundle_templates_airline ON bundle_templates(airline_id);
-CREATE INDEX idx_bundle_templates_type ON bundle_templates(bundle_type);
-CREATE INDEX idx_bundle_templates_active ON bundle_templates(is_active, airline_id);
+CREATE INDEX IF NOT EXISTS idx_bundle_templates_airline ON bundle_templates(airline_id);
+CREATE INDEX IF NOT EXISTS idx_bundle_templates_type ON bundle_templates(bundle_type);
+CREATE INDEX IF NOT EXISTS idx_bundle_templates_active ON bundle_templates(is_active, airline_id);
 
 -- Example product_types:
 -- [
@@ -136,7 +136,7 @@ CREATE INDEX idx_bundle_templates_active ON bundle_templates(is_active, airline_
 -- 6. INVENTORY RULES
 -- ============================================================================
 
-CREATE TABLE inventory_rules (
+CREATE TABLE IF NOT EXISTS inventory_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id) ON DELETE CASCADE,
     resource_type VARCHAR(50) NOT NULL,  -- 'SEAT', 'MEAL', 'LOUNGE', 'BAG'
@@ -150,14 +150,14 @@ CREATE TABLE inventory_rules (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_inventory_rules_airline ON inventory_rules(airline_id);
-CREATE INDEX idx_inventory_rules_type ON inventory_rules(resource_type);
+CREATE INDEX IF NOT EXISTS idx_inventory_rules_airline ON inventory_rules(airline_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_rules_type ON inventory_rules(resource_type);
 
 -- ============================================================================
 -- 7. OFFER GENERATION RULES
 -- ============================================================================
 
-CREATE TABLE offer_generation_rules (
+CREATE TABLE IF NOT EXISTS offer_generation_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id) ON DELETE CASCADE,
     rule_name VARCHAR(100) NOT NULL,
@@ -170,7 +170,7 @@ CREATE TABLE offer_generation_rules (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_offer_gen_rules_airline ON offer_generation_rules(airline_id);
+CREATE INDEX IF NOT EXISTS idx_offer_gen_rules_airline ON offer_generation_rules(airline_id);
 
 -- Example offer_types:
 -- [
@@ -186,7 +186,7 @@ CREATE INDEX idx_offer_gen_rules_airline ON offer_generation_rules(airline_id);
 -- 8. RULE AUDIT LOG
 -- ============================================================================
 
-CREATE TABLE rule_audit_log (
+CREATE TABLE IF NOT EXISTS rule_audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     airline_id UUID REFERENCES airlines(id),
     rule_id UUID,
@@ -197,68 +197,58 @@ CREATE TABLE rule_audit_log (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_rule_audit_airline ON rule_audit_log(airline_id);
-CREATE INDEX idx_rule_audit_created ON rule_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_rule_audit_airline ON rule_audit_log(airline_id);
+CREATE INDEX IF NOT EXISTS idx_rule_audit_created ON rule_audit_log(created_at);
 
 -- ============================================================================
--- SAMPLE DATA
+-- SAMPLE DATA: LOW COST CARRIER (LCC) FOCUS
 -- ============================================================================
 
--- Insert sample airline
+-- Insert single LCC airline (Hub: Singapore)
 INSERT INTO airlines (code, name, country) VALUES
-('AA', 'American Airlines', 'US'),
-('UA', 'United Airlines', 'US'),
-('BA', 'British Airways', 'GB');
+('AL', 'AirAltis LCC', 'SG')
+ON CONFLICT (code) DO NOTHING;
 
--- Insert sample products for American Airlines
+-- Insert LCC products (Ancillaries follow unbundled model)
 INSERT INTO products (airline_id, product_type, product_code, name, base_price_nuc, metadata)
 SELECT 
-    (SELECT id FROM airlines WHERE code = 'AA'),
-    'SEAT',
-    'SEAT-EXTRA-LEG',
-    'Extra Legroom Seat',
-    3000,
-    '{"category": "EXTRA_LEGROOM", "legroom_inches": 35, "available_rows": [12,13,14,15]}'::jsonb;
+    id, 'SEAT', 'LCC-SEAT-FRONTRW', 'Front Row Seat', 2500, 
+    '{"category": "EXTRA_LEGROOM", "row": 1, "is_exit_row": false}'::jsonb
+FROM airlines WHERE code = 'AL'
+ON CONFLICT (airline_id, product_code) DO NOTHING;
 
 INSERT INTO products (airline_id, product_type, product_code, name, base_price_nuc, metadata)
 SELECT 
-    (SELECT id FROM airlines WHERE code = 'AA'),
-    'MEAL',
-    'MEAL-HOT',
-    'Hot Meal',
-    1500,
-    '{"category": "HOT", "dietary": ["VEGETARIAN", "CHICKEN", "BEEF"]}'::jsonb;
+    id, 'BAG', 'LCC-BAG-20KG', 'Checked Baggage 20kg', 3500, 
+    '{"max_weight_kg": 20}'::jsonb
+FROM airlines WHERE code = 'AL'
+ON CONFLICT (airline_id, product_code) DO NOTHING;
 
--- Insert sample pricing rule (Continuous Pricing)
+INSERT INTO products (airline_id, product_type, product_code, name, base_price_nuc, metadata)
+SELECT 
+    id, 'MEAL', 'LCC-MEAL-SNACK', 'Ham & Cheese Sandwich', 800, 
+    '{"category": "SNACK", "is_hot": false}'::jsonb
+FROM airlines WHERE code = 'AL'
+ON CONFLICT (airline_id, product_code) DO NOTHING;
+
+-- LCC Pricing Rule: Demand-based pricing for baggage
 INSERT INTO pricing_rules (airline_id, product_id, rule_name, rule_type, conditions, adjustments, priority)
 SELECT 
-    (SELECT id FROM airlines WHERE code = 'AA'),
-    (SELECT id FROM products WHERE product_code = 'SEAT-EXTRA-LEG' LIMIT 1),
-    'Continuous Pricing - Seats',
-    'DEMAND',
-    '{"product_type": "SEAT", "utilization": {"min": 0.0}}'::jsonb,
-    '{"type": "FORMULA", "formula": "1.0 + (utilization^2 * 2.0)", "min": 0.5, "max": 3.0}'::jsonb,
-    10;
+    airline_id, id, 'Dynamic Baggage Pricing', 'DEMAND',
+    '{"product_type": "BAG"}'::jsonb,
+    '{"type": "MULTIPLIER", "value": 1.2}'::jsonb, -- 20% surcharge in high demand
+    10
+FROM products WHERE product_code = 'LCC-BAG-20KG';
 
--- Insert sample bundle template (Comfort Bundle)
+-- LCC Bundle: "Value Pack" (Seat + Bag)
 INSERT INTO bundle_templates (airline_id, bundle_name, bundle_type, product_types, discount_percentage, priority)
 SELECT 
-    (SELECT id FROM airlines WHERE code = 'AA'),
-    'Comfort Bundle',
-    'COMFORT',
+    id, 'Value Pack', 'COMFORT',
     '[
         {"type": "FLIGHT", "required": true},
         {"type": "SEAT", "category": "EXTRA_LEGROOM", "required": false},
-        {"type": "MEAL", "category": "HOT", "required": false},
-        {"type": "BAG", "quantity": 1, "required": false}
+        {"type": "BAG", "required": true}
     ]'::jsonb,
-    10.0,
-    2;
-
--- Insert sample inventory rule
-INSERT INTO inventory_rules (airline_id, resource_type, hold_duration_seconds, overbooking_percentage)
-SELECT 
-    (SELECT id FROM airlines WHERE code = 'AA'),
-    'SEAT',
-    900,
-    5.0;
+    15.0,
+    1
+FROM airlines WHERE code = 'AL';

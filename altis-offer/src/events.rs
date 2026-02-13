@@ -31,6 +31,14 @@ impl OfferTelemetry {
         self.publish("offer_accepted", &event).await
     }
 
+    pub async fn log_order_paid(&self, event: altis_shared::models::events::OrderPaidEvent) -> Result<(), String> {
+        self.publish("order_paid", &event).await
+    }
+
+    pub async fn log_settlement(&self, event: altis_shared::models::events::SettlementEvent) -> Result<(), String> {
+        self.publish("settlement", &event).await
+    }
+
     async fn publish<T: serde::Serialize>(&self, event_type: &str, payload: &T) -> Result<(), String> {
         let json = serde_json::to_string(payload).map_err(|e| e.to_string())?;
         

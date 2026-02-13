@@ -342,4 +342,51 @@ impl OrderRepository for StoreOrderRepository {
 
         Ok(fulfillment_id)
     }
+
+    async fn consume_fulfillment(
+        &self,
+        barcode: &str,
+        location: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            r#"
+            UPDATE fulfillment 
+            SET consumed_at = NOW(), consumption_location = $2
+            WHERE barcode = $1
+            "#
+        )
+        .bind(barcode)
+        .bind(location)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn add_order_change(
+        &self,
+        order_id: Uuid,
+        change_type: &str,
+        old_value: Option<serde_json::Value>,
+        new_value: Option<serde_json::Value>,
+        changed_by: &str,
+        reason: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            r#"
+            INSERT INTO order_changes (order_id, change_type, old_value, new_value, changed_by, reason)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            "#
+        )
+        .bind(order_id)
+        .bind(change_type)
+        .bind(old_value)
+        .bind(new_value)
+        .bind(changed_by)
+        .bind(reason)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }

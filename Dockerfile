@@ -1,7 +1,8 @@
 # Builder stage
 FROM rust:bookworm AS dev
 WORKDIR /app
-RUN apt-get update && apt-get install -y cmake build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y cmake build-essential protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 RUN cargo install cargo-watch
 COPY . .
 CMD ["cargo", "watch", "-x", "run"]
@@ -10,7 +11,8 @@ FROM rust:bookworm AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y cmake build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y cmake build-essential protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 
 # Copy the entire workspace
 COPY . .

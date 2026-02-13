@@ -44,9 +44,13 @@ fn customer_routes(state: AppState) -> Router<AppState> {
                 .route("/orders", get(orders::list_orders))
                 .route("/orders/{id}", get(orders::get_order))
                 .route("/orders/{id}/pay", post(orders::pay_order))
+                .route("/orders/{id}/reshop", post(orders::reshop_order))
                 .route("/orders/{id}/customize", post(orders::customize_order))
                 .route("/orders/{id}/fulfillment", get(orders::get_fulfillment))
                 .route("/orders/{id}/cancel", post(orders::cancel_order))
+
+                // Fulfillment / Service Delivery
+                .route("/fulfillment/{barcode}/consume", post(orders::consume_fulfillment))
                 .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware::auth::customer_auth_middleware))
         )
 }

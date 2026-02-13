@@ -196,4 +196,28 @@ impl ProductRepository for StoreProductRepository {
         
         Ok(())
     }
+
+    async fn get_airline_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<Value>, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query!(
+            "SELECT id, code, name, country, status FROM airlines WHERE code = $1",
+            code
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            return Ok(Some(serde_json::json!({
+                "id": row.id,
+                "code": row.code,
+                "name": row.name,
+                "country": row.country,
+                "status": row.status
+            })));
+        }
+
+        Ok(None)
+    }
 }

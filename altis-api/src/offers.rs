@@ -67,10 +67,18 @@ pub async fn search_offers(
     let search_context_json = serde_json::to_value(&domain_context).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     // 2. Fetch products from catalog
-    // For now, we fetch AA products as a default if no specific airline is in context
-    let airline_id = Uuid::nil(); // TODO: Determine airline from route/config
+    // Dynamically find AirAltis LCC (AL) ID
+    let airline = state.catalog_repo.get_airline_by_code("AL").await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?; // AL must exist from migration
+    
+    let airline_id = Uuid::parse_str(airline["id"].as_str().unwrap_or_default()).unwrap_or_default();
+    
     let products = state.catalog_repo.list_products(airline_id, None).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Failed to fetch products for airline {}: {:?}", airline_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Helper to find product by code
     let find_product = |code: &str| {
@@ -88,7 +96,7 @@ pub async fn search_offers(
         Some("FLIGHT-BASE".to_string()),
         format!("{} to {}", req.origin, req.destination),
         Some(format!("Direct flight on {}", req.departure_date)),
-        20000, 
+        5000, // Budget price for regional SIN flight
         req.passengers as i32,
         serde_json::json!({"origin": req.origin, "destination": req.destination}),
     ));
@@ -102,32 +110,32 @@ pub async fn search_offers(
         Some("FLIGHT-BASE".to_string()),
         format!("{} to {}", req.origin, req.destination),
         None,
-        20000,
+        5000,
         req.passengers as i32,
         serde_json::json!({}),
     ));
     
-    if let Some(seat) = find_product("SEAT-EXTRA-LEG") {
+    if let Some(seat) = find_product("LCC-SEAT-FRONTRW") {
         comfort.add_item(altis_offer::OfferItem::new(
             "SEAT".to_string(),
             None,
-            Some("SEAT-EXTRA-LEG".to_string()),
+            Some("LCC-SEAT-FRONTRW".to_string()),
             seat["name"].as_str().unwrap_or("Seat").to_string(),
             seat["description"].as_str().map(|s| s.to_string()),
-            (seat["base_price_nuc"].as_i64().unwrap_or(3000) as f64 * 0.9) as i32,
+            (seat["base_price_nuc"].as_i64().unwrap_or(2500) as f64 * 0.9) as i32,
             req.passengers as i32,
             seat["metadata"].clone(),
         ));
     }
 
-    if let Some(meal) = find_product("MEAL-HOT") {
+    if let Some(meal) = find_product("LCC-MEAL-SNACK") {
         comfort.add_item(altis_offer::OfferItem::new(
             "MEAL".to_string(),
             None,
-            Some("MEAL-HOT".to_string()),
+            Some("LCC-MEAL-SNACK".to_string()),
             meal["name"].as_str().unwrap_or("Meal").to_string(),
             meal["description"].as_str().map(|s| s.to_string()),
-            (meal["base_price_nuc"].as_i64().unwrap_or(1500) as f64 * 0.9) as i32,
+            (meal["base_price_nuc"].as_i64().unwrap_or(800) as f64 * 0.9) as i32,
             req.passengers as i32,
             meal["metadata"].clone(),
         ));

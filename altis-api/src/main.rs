@@ -35,6 +35,12 @@ async fn main() {
         .await
         .expect("Failed to connect to Postgres");
 
+    // Run Migrations
+    sqlx::migrate!("../migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run database migrations");
+
     // Repositories
     let offer_repo = Arc::new(altis_store::StoreOfferRepository::new(pool.clone(), Arc::new(redis_arc.get_client())));
     let order_repo = Arc::new(altis_store::StoreOrderRepository::new(pool.clone()));

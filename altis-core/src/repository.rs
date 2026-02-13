@@ -80,6 +80,22 @@ pub trait OrderRepository: Send + Sync {
         fulfillment_type: &str,
         barcode: &str,
     ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn consume_fulfillment(
+        &self,
+        barcode: &str,
+        location: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn add_order_change(
+        &self,
+        order_id: Uuid,
+        change_type: &str,
+        old_value: Option<serde_json::Value>,
+        new_value: Option<serde_json::Value>,
+        changed_by: &str,
+        reason: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Generic repository trait for product catalog access
@@ -111,4 +127,9 @@ pub trait ProductRepository: Send + Sync {
         &self,
         id: Uuid,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn get_airline_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
 }

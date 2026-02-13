@@ -32,3 +32,12 @@ pub struct OrderPaidEvent {
     pub total_nuc: i32,
     pub timestamp: i64,
 }
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct SettlementEvent {
+    pub order_id: Uuid,
+    pub amount_nuc: i32,
+    pub currency: String,
+    pub event_type: String, // PAYMENT, CONSUMPTION, REFUND
+    pub timestamp: i64,
+}
