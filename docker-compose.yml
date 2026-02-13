@@ -67,6 +67,20 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
+  ml-brain:
+    build:
+      context: ../altis-brain
+    ports:
+      - "50051:50051"
+    networks:
+      default:
+        aliases:
+          - ml-brain
+
+networks:
+  default:
+    name: altis-network
+
 volumes:
   postgres_data:
   redis_data:
