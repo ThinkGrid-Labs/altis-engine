@@ -92,6 +92,8 @@ To explore the engine's capabilities:
 
 ### 💡 Fun Fact: Why "Altis"?
 
-The name **Altis** is inspired by the *sacred grove* in Olympia, Greece—the heart of the ancient Olympic Games. Just as the Altis was the central precinct where competitors gathered to strive for excellence, the Altis Engine serves as the core "sacred precinct" of an airline's digital ecosystem, where the legacy of PNRs is replaced by the excellence of modern Offer/Order retailing.
+The name **Altis** carries a dual legacy:
+1.  **Etymology**: It is rooted in the Latin *Altus*, meaning "high," "deep," or "noble"—a perfect nod to the **high-altitude** world of aviation and the depth of our technical architecture.
+2.  **Mythology**: It is inspired by the *sacred grove* in Olympia, Greece—the heart of the ancient Olympic Games. Just as the Altis was the central precinct where competitors gathered to strive for excellence, the Altis Engine serves as the core "sacred precinct" of an airline's digital ecosystem, where the legacy of PNRs is replaced by the excellence of modern Offer/Order retailing.
 
 **Built with ❤️ in Rust**
