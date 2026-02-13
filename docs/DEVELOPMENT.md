@@ -41,3 +41,21 @@ cargo test --workspace
 - `altis-offer`: Merchandising and AI ranking logic.
 - `altis-order`: Lifecycle management and fulfillment.
 - `altis-store`: Persistence layer (SQL/Redis/Kafka).
+
+---
+
+## 🛡️ Security Architecture
+
+### Authentication Implementation
+- **JWT**: Stateless session management using HMAC-SHA256.
+- **Guest Tokens**: Temporary authorization for search and offer exploration.
+- **Validation**: Strict audience and expiration checks on every request.
+
+### Privacy & Data Protection
+- **PII Encryption**: Any stored personal data is hashed or encrypted.
+- **One Identity**: Uses the `OneIdResolver` trait to verify traveler credentials via W3C standards.
+- **Logging**: Sensitive data (tokens, PII) is automatically filtered from system logs.
+
+### Resiliency (DoS Protection)
+- **Circuit Breakers**: Protects against slow-loris or cascading failures via the `resiliency` middleware.
+- **Metrics**: Real-time monitoring of 4xx/5xx rates for anomaly detection.

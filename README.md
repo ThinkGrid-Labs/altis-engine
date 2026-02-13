@@ -61,6 +61,21 @@ Altis is not just an app; it's a implementation of global airline standards:
 
 ---
 
+## 🛡️ Security & Privacy by Design
+
+Altis is built for the high-stakes environment of global aviation, where trust is non-negotiable.
+
+### 1. The Rust Advantage (Memory Safety)
+By using Rust, Altis eliminates entire classes of security vulnerabilities that plague legacy C/C++ systems, such as **Buffer Overflows** and **Memory Leaks**. This ensures a robust, exploit-resistant core.
+
+### 2. Privacy-First Identity
+Aligned with **IATA One Identity**, we leverage Decentralized Identifiers (DIDs). Travelers maintain control over their data, and Altis only processes the minimum necessary Verifiable Credentials to authorize travel, reducing PII surface area.
+
+### 3. Stateless API Security
+Altis implements modern **JWT-based Authentication** across all retailing operations. Combined with built-in **Circuit Breakers** and **Rate Limiting**, the engine protects itself and its downstream suppliers from cascading failures and malicious traffic.
+
+---
+
 ## 🚦 Getting Started
 
 To explore the engine's capabilities:
