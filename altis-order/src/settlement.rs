@@ -1,12 +1,14 @@
-use crate::models::{Order, SettlementEvent, LedgerEntry};
+use crate::models::{Order, LedgerEntry};
 use async_trait::async_trait;
 use uuid::Uuid;
 use chrono::Utc;
 use serde_json::{json, Value};
 
+/// Standardized interface for converting internal financial records into industry-recognized formats.
 #[async_trait]
 pub trait SettlementAdaptor {
-    /// Convert an order and its ledger entries into a standard settlement format
+    /// Convert an order and its ledger entries into a standard settlement format (e.g., IATA SwO, RET/HOT).
+    /// Returns a serialized dynamic Value representing the target schema.
     async fn adapt(&self, order: &Order, ledger: Vec<LedgerEntry>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>>;
 }
 

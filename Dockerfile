@@ -8,14 +8,38 @@ RUN cargo install sqlx-cli --no-default-features --features postgres
 COPY . .
 CMD ["cargo", "watch", "-x", "run"]
 
-FROM rust:bookworm AS builder
+# Build stage
+FROM rust:1.84-slim-bookworm AS builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    cmake \
+    git \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y cmake build-essential protobuf-compiler && rm -rf /var/lib/apt/lists/*
+# Pre-fetch dependencies (caching layer)
+COPY Cargo.toml Cargo.lock ./
+COPY altis-core/Cargo.toml altis-core/
+COPY altis-api/Cargo.toml altis-api/
+COPY altis-catalog/Cargo.toml altis-catalog/
+COPY altis-offer/Cargo.toml altis-offer/
+COPY altis-order/Cargo.toml altis-order/
+COPY altis-shared/Cargo.toml altis-shared/
+COPY altis-store/Cargo.toml altis-store/
 
+# Create dummy source files for dependency caching
+RUN mkdir -p altis-core/src altis-api/src altis-catalog/src altis-offer/src altis-order/src altis-shared/src altis-store/src \
+    && echo "fn main() {}" > altis-api/src/main.rs \
+    && touch altis-core/src/lib.rs altis-catalog/src/lib.rs altis-offer/src/lib.rs altis-order/src/lib.rs altis-shared/src/lib.rs altis-store/src/lib.rs
 
-# Copy the entire workspace
+RUN cargo fetch
+
+# Copy actual source and workspace config
 COPY . .
 
 # Build the application

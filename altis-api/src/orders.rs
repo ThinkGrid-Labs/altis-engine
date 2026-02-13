@@ -274,7 +274,7 @@ pub async fn get_fulfillment(
         fulfillment.iter().map(|f| BarcodeResponse {
             item_id: Uuid::parse_str(f["order_item_id"].as_str().unwrap_or_default()).unwrap_or_default(),
             barcode: f["barcode"].as_str().unwrap_or_default().to_string(),
-            qr_code_url: Some(format!("https://api.altis.com/qr/{}", f["barcode"].as_str().unwrap_or_default())),
+            qr_code_url: Some(format!("{}/qr/{}", state.api_base_url, f["barcode"].as_str().unwrap_or_default())),
         }).collect()
     } else {
         vec![]
@@ -436,7 +436,7 @@ pub async fn accept_reaccommodation(
     Json(req): Json<AcceptReaccommodationRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
     // 1. Fetch current order
-    let order_json = state.order_repo.get_order(order_id).await
+    let _order_json = state.order_repo.get_order(order_id).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 

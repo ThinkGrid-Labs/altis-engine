@@ -45,6 +45,7 @@ pub struct AuthConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ServerConfig {
     pub port: u16,
+    pub base_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

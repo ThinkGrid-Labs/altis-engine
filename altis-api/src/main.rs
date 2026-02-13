@@ -109,6 +109,7 @@ async fn main() {
         payment_orchestrator,
         one_id_resolver,
         resiliency,
+        api_base_url: config.server.base_url.clone(),
     };
 
     let app = app(app_state);

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use altis_catalog::{ProductType, Product};
+use altis_catalog::ProductType;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

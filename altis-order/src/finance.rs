@@ -1,4 +1,4 @@
-use crate::models::{Order, OrderItem, RevenueStatus, LedgerEntry};
+use crate::models::{Order, RevenueStatus, LedgerEntry};
 use uuid::Uuid;
 use chrono::Utc;
 

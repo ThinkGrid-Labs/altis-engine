@@ -7,21 +7,26 @@ use crate::state::AppState;
 use crate::offers::SearchOffersRequest;
 use altis_core::iata::{AirShoppingRequest, AirShoppingResponse, NdcOffer, NdcPrice, NdcOfferItem};
 
+impl From<AirShoppingRequest> for SearchOffersRequest {
+    fn from(req: AirShoppingRequest) -> Self {
+        Self {
+            origin: req.shopping_criteria.origin,
+            destination: req.shopping_criteria.destination,
+            departure_date: req.shopping_criteria.travel_date,
+            return_date: None,
+            passengers: 1,
+            cabin_class: None,
+            user_segment: None,
+        }
+    }
+}
+
 pub async fn air_shopping(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(req): Json<AirShoppingRequest>,
 ) -> Result<Json<AirShoppingResponse>, StatusCode> {
     // 1. Map NDC Request to internal search
-    // Using the same logic as our native search for now
-    let search_req = SearchOffersRequest {
-        origin: req.shopping_criteria.origin.clone(),
-        destination: req.shopping_criteria.destination.clone(),
-        departure_date: req.shopping_criteria.travel_date.clone(),
-        return_date: None,
-        passengers: 1,
-        cabin_class: None,
-        user_segment: None,
-    };
+    let _search_req = SearchOffersRequest::from(req);
 
     // We reuse the native search logic by calling a shared helper or just duplicating the core logic
     // For this implementation, we'll simulate the response based on the Search API

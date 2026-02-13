@@ -169,7 +169,7 @@ impl OfferGenerator {
     }
     
     /// Helper to add ancillary products
-    fn add_ancillaries(
+    pub fn _add_ancillaries(
         &self,
         offer: &mut Offer,
         ancillary_products: &[Product],

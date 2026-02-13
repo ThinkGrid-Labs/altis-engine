@@ -33,4 +33,5 @@ pub struct AppState {
     pub payment_orchestrator: Arc<altis_order::orchestrator::PaymentOrchestrator>,
     pub one_id_resolver: Arc<dyn altis_core::identity::OneIdResolver>,
     pub resiliency: Arc<ResiliencyState>,
+    pub api_base_url: String, // Dynamic base URL for QR codes, etc.
 }

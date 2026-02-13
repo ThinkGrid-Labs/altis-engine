@@ -33,3 +33,9 @@ altis-api/check_output.txt
 
 # OS
 Thumbs.db
+
+# Documentation
+/docs/*
+!/docs/USAGE.md
+!/docs/DEVELOPMENT.md
+!/docs/architecture/

@@ -1,7 +1,6 @@
 use crate::models::{Order, OrderItem, OrderItemStatus};
 use altis_catalog::product::{FlightProduct, FlightStatus};
 use uuid::Uuid;
-use std::collections::HashMap;
 
 /// Result of a re-accommodation attempt
 pub struct ReaccommodationResult {

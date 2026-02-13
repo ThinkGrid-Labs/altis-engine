@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 // ============================================================================
 // NDC AirShopping Models (v21.3 inspired)
