@@ -9,7 +9,7 @@
 
 For decades, airline commerce has been constrained by legacy PNR (Passenger Name Record) and E-Ticket architectures built on 1960s logic. These systems create fragmented states, rigid pricing, and high operational costs.
 
-**Altis Engine** is built on the premise of the [IATA Modern Retailing](https://www.iata.org/en/programs/distribution/modern-retailing/) "End State": **A unified Offer and Order world.**
+**Altis Engine** is built on the premise of the [IATA Modern Retailing](https://www.iata.org/en/programs/airline-distribution/retailing/) "End State": **A unified Offer and Order world.**
 
 ### Why Altis? (Legacy vs. Modern Retailing)
 
@@ -32,7 +32,7 @@ Move beyond static shelves. Altis uses real-time AI ranking to prioritize bundle
 From `PROPOSED` to `FULFILLED`, the entire lifecycle resides in a single, atomic Order record. This eliminates the "Synchronization Hell" between PNRs, Tickets, and DCS systems, reducing servicing costs by up to 40%.
 
 ### 3. IATA One Identity Integration
-Native support for [IATA One Identity](https://www.iata.org/en/programs/distribution/one-identity/) standards using Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs). Enabling "Travel-by-Face" and personalized retailing without compromising privacy.
+Native support for [IATA One Identity](https://www.iata.org/en/programs/passenger/one-id/) standards using Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs). Enabling "Travel-by-Face" and personalized retailing without compromising privacy.
 
 ### 4. Modern Settlement with Orders (SwO)
 Bypass legacy proration complexities. Altis implements **Settlement with Orders (SwO)**, providing real-time financial visibility and automated interline clearing directly from the Order record.
