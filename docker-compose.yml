@@ -72,14 +72,6 @@ services:
       context: ../altis-brain
     ports:
       - "50051:50051"
-    networks:
-      default:
-        aliases:
-          - ml-brain
-
-networks:
-  default:
-    name: altis-network
 
 volumes:
   postgres_data:
