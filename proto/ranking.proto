@@ -29,6 +29,7 @@ message SearchContext {
     string departure_date = 3;
     int32 passengers = 4;
     string cabin_class = 5;
+    string user_segment = 6;
 }
 
 // Features of a specific offer

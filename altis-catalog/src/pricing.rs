@@ -42,6 +42,8 @@ pub struct PricingEngine {
     config: PricingConfig,
 }
 
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PricingConfig {
     /// Minimum price adjustment (in cents)
@@ -55,6 +57,9 @@ pub struct PricingConfig {
     
     /// Enable continuous pricing
     pub enable_continuous: bool,
+    
+    /// Multipliers for different user segments (e.g., "premium" => 1.2)
+    pub segment_multipliers: HashMap<String, f64>,
 }
 
 impl Default for PricingConfig {
@@ -64,6 +69,14 @@ impl Default for PricingConfig {
             max_multiplier: 3.0,
             min_multiplier: 0.5,
             enable_continuous: true,
+            segment_multipliers: {
+                let mut m = HashMap::new();
+                m.insert("premium".to_string(), 1.2);
+                m.insert("corporate".to_string(), 1.1);
+                m.insert("economy".to_string(), 1.0);
+                m.insert("leisure".to_string(), 0.95);
+                m
+            },
         }
     }
 }
@@ -106,9 +119,24 @@ impl PricingEngine {
     }
     
     /// Apply continuous pricing adjustment (by cents)
-    pub fn apply_continuous_adjustment(&self, base_price: i32, multiplier: f64) -> i32 {
+    pub fn apply_continuous_adjustment(&self, base_price: i32, context: &PricingContext) -> i32 {
         if !self.config.enable_continuous {
             return base_price;
+        }
+        
+        // Start with demand multiplier if present in context, or 1.0
+        let mut multiplier = context.demand_multiplier.unwrap_or(1.0);
+        
+        // Factor in time multiplier
+        if let Some(tm) = context.time_multiplier {
+            multiplier *= tm;
+        }
+        
+        // Factor in segment multiplier
+        if let Some(segment) = &context.user_segment {
+            if let Some(sm) = self.config.segment_multipliers.get(segment) {
+                multiplier *= sm;
+            }
         }
         
         let adjusted = (base_price as f64 * multiplier) as i32;

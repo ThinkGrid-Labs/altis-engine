@@ -17,7 +17,14 @@ pub mod error;
 pub mod offers;
 pub mod orders;
 pub mod admin;
+pub mod finance;
 pub mod middleware;
+use crate::middleware::resiliency::circuit_breaker_middleware;
+pub mod webhooks;
+pub mod v1 {
+    pub mod ndc;
+    pub mod oneorder;
+}
 
 pub use state::AppState;
 
@@ -44,10 +51,13 @@ fn customer_routes(state: AppState) -> Router<AppState> {
                 .route("/orders", get(orders::list_orders))
                 .route("/orders/{id}", get(orders::get_order))
                 .route("/orders/{id}/pay", post(orders::pay_order))
+                .route("/orders/{id}/payment-intent", post(orders::initialize_payment_intent))
                 .route("/orders/{id}/reshop", post(orders::reshop_order))
                 .route("/orders/{id}/customize", post(orders::customize_order))
                 .route("/orders/{id}/fulfillment", get(orders::get_fulfillment))
                 .route("/orders/{id}/cancel", post(orders::cancel_order))
+                .route("/orders/{id}/accept-reaccommodation", post(orders::accept_reaccommodation))
+                .route("/orders/{id}/involuntary-refund", post(orders::involuntary_refund))
 
                 // Fulfillment / Service Delivery
                 .route("/fulfillment/{barcode}/consume", post(orders::consume_fulfillment))
@@ -72,6 +82,15 @@ fn admin_routes() -> Router<AppState> {
         // Bundle Templates
         .route("/airlines/{airline_id}/bundles", get(admin::list_bundles).post(admin::create_bundle))
         .route("/bundles/{id}", get(admin::get_bundle).put(admin::update_bundle).delete(admin::delete_bundle))
+
+        // Disruption Management
+        .route("/disruptions", post(admin::trigger_disruption))
+        
+        // Finance / Settlement
+        .route("/finance/orders/{id}/ledger", get(finance::get_order_ledger))
+        .route("/finance/airlines/{id}/settlement", get(finance::get_airline_settlement))
+        .route("/finance/airlines/{id}/export/swo", get(finance::export_swo))
+        .route("/finance/airlines/{id}/export/legacy", get(finance::export_legacy))
 }
 
 // ============================================================================
@@ -96,12 +115,21 @@ pub fn app(state: AppState) -> Router {
         // Admin routes at /v1/admin/*
         .nest("/v1/admin", admin_routes())
         
+        // Webhooks
+        .route("/v1/webhooks/payments/stripe", post(webhooks::handle_stripe_webhook))
+
+        // Standardized IATA Interfaces
+        .route("/v1/ndc/airshopping", post(v1::ndc::air_shopping))
+        .route("/v1/oneorder/{id}", get(v1::oneorder::order_retrieve))
+
         // Health check
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics_handler))
         
         // Middleware
         .layer(cors)
         .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn_with_state(state.clone(), circuit_breaker_middleware))
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .with_state(state)
 }
@@ -135,4 +163,27 @@ async fn health_check() -> impl IntoResponse {
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION")
     }))
+}
+
+async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    use prometheus::{Encoder, TextEncoder, Registry, Gauge, Opts};
+    
+    let encoder = TextEncoder::new();
+    let mut buffer = Vec::new();
+    let registry = Registry::new();
+    
+    // Payment Circuit Breaker Gauge
+    let payment_failures = Gauge::with_opts(Opts::new("altis_payment_cb_failures", "Failure count for payment circuit breaker")).unwrap();
+    payment_failures.set(state.resiliency.payment_cb.failure_count.load(std::sync::atomic::Ordering::SeqCst) as f64);
+    
+    // NDC Circuit Breaker Gauge
+    let ndc_failures = Gauge::with_opts(Opts::new("altis_ndc_cb_failures", "Failure count for NDC circuit breaker")).unwrap();
+    ndc_failures.set(state.resiliency.ndc_cb.failure_count.load(std::sync::atomic::Ordering::SeqCst) as f64);
+
+    registry.register(Box::new(payment_failures.clone())).unwrap();
+    registry.register(Box::new(ndc_failures.clone())).unwrap();
+    
+    encoder.encode(&registry.gather(), &mut buffer).unwrap();
+    
+    String::from_utf8(buffer).unwrap()
 }

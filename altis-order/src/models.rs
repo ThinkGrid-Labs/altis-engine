@@ -23,6 +23,17 @@ pub enum OrderItemStatus {
     Refunded,
     Cancelled,
     Modified,
+    Protected,        // Item is held/locked during disruption
+    Reaccommodated,   // New item proposed by the engine
+}
+
+/// Status of revenue recognition for an item
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RevenueStatus {
+    Unearned,         // Payment received but service not delivered
+    Earned,           // Service delivered (recognized as revenue)
+    Refunded,         // Revenue returned to customer
 }
 
 /// The single source of truth for a customer's purchase
@@ -31,6 +42,7 @@ pub struct Order {
     pub id: Uuid,
     pub customer_id: String,
     pub customer_email: Option<String>,
+    pub customer_did: Option<String>,
     pub offer_id: Option<Uuid>,
     pub airline_id: Option<Uuid>,
     pub items: Vec<OrderItem>,
@@ -50,6 +62,7 @@ impl Order {
             id: Uuid::new_v4(),
             customer_id,
             customer_email: None,
+            customer_did: None,
             offer_id: None,
             airline_id: None,
             items: Vec::new(),
@@ -97,6 +110,10 @@ pub struct OrderItem {
     pub price_nuc: i32,
     pub quantity: i32,
     pub status: OrderItemStatus,
+    pub revenue_status: RevenueStatus,
+    pub operating_carrier_id: Option<Uuid>,
+    pub net_rate_nuc: Option<i32>,
+    pub commission_nuc: Option<i32>,
     pub metadata: serde_json::Value,
 }
 
@@ -121,6 +138,10 @@ impl OrderItem {
             price_nuc,
             quantity,
             status: OrderItemStatus::Active,
+            revenue_status: RevenueStatus::Unearned,
+            operating_carrier_id: None,
+            net_rate_nuc: None,
+            commission_nuc: None,
             metadata,
         }
     }
@@ -159,4 +180,33 @@ impl Fulfillment {
         self.is_consumed = true;
         self.consumed_at = Some(Utc::now());
     }
+}
+
+/// A financial record for an order item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerEntry {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub order_item_id: Uuid,
+    pub transaction_type: String, // REVENUE_RECOGNITION, REFUND, ADJUSTMENT
+    pub amount_nuc: i32,
+    pub currency: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A record for IATA settlement reporting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettlementEvent {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub airline_id: Uuid,
+    pub settlement_id: String, // IATA-standard ID
+    pub event_type: String,     // SALE, REFUND, EXCHANGE
+    pub gross_amount: i32,
+    pub tax_amount: i32,
+    pub net_amount: i32,
+    pub currency: String,
+    pub transaction_date: DateTime<Utc>,
+    pub reported_at: Option<DateTime<Utc>>,
 }

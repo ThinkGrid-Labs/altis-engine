@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::net::SocketAddr;
-use altis_api::{app, state::{AppState, AuthConfig}};
+use altis_api::{app, state::{AppState, AuthConfig, ResiliencyState}};
+use altis_api::middleware::resiliency::CircuitBreaker;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -48,11 +49,48 @@ async fn main() {
 
     // AI/Telemetry
     let telemetry = Arc::new(altis_offer::events::OfferTelemetry::new(&config.kafka.brokers, "offers"));
+    
+    let ml_client = if let Some(url) = &config.ranking.ml_service_url {
+        match tonic::transport::Endpoint::from_shared(url.clone()) {
+            Ok(endpoint) => {
+                match endpoint.connect().await {
+                    Ok(channel) => {
+                        tracing::info!("Connected to ML Ranking service at {}", url);
+                        Some(altis_offer::ai_ranker::ranking::ranking_service_client::RankingServiceClient::new(channel))
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to connect to ML service at {}: {}", url, e);
+                        None
+                    }
+                }
+            },
+            Err(e) => {
+                tracing::error!("Invalid ML service URL {}: {}", url, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let ranker = Arc::new(tokio::sync::Mutex::new(altis_offer::ai_ranker::OfferRanker::new(
-        altis_offer::ai_ranker::RankingConfig::default(),
+        config.ranking.clone(),
         Some(telemetry.clone()),
-        None, // TODO: Initialize gRPC client when available
+        ml_client,
     )));
+
+    // Payment Orchestration
+    let payment_adapter = Arc::new(altis_order::orchestrator::MockPaymentAdapter);
+    let payment_orchestrator = Arc::new(altis_order::orchestrator::PaymentOrchestrator::new(payment_adapter));
+
+    // One Identity
+    let one_id_resolver = Arc::new(altis_core::identity::MockOneIdResolver);
+
+    // Resiliency
+    let resiliency = Arc::new(ResiliencyState {
+        payment_cb: CircuitBreaker::new("PaymentGateway", 3, std::time::Duration::from_secs(30)),
+        ndc_cb: CircuitBreaker::new("NDCAPI", 5, std::time::Duration::from_secs(60)),
+    });
 
     let app_state = AppState {
         redis: redis_arc,
@@ -68,6 +106,9 @@ async fn main() {
         catalog_repo,
         telemetry,
         ranker,
+        payment_orchestrator,
+        one_id_resolver,
+        resiliency,
     };
 
     let app = app(app_state);

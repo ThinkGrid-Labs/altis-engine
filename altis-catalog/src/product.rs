@@ -17,14 +17,25 @@ pub enum ProductType {
     FastTrack,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FlightStatus {
+    Scheduled,
+    Delayed,
+    Cancelled,
+    Diverted,
+}
+
 /// Core product structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Product {
     pub id: Uuid,
     pub product_type: ProductType,
+    pub product_code: String,
     pub name: String,
     pub description: Option<String>,
     pub base_price_nuc: i32,
+    pub margin_percentage: f64,
     pub is_active: bool,
     pub metadata: serde_json::Value,
 }
@@ -68,6 +79,7 @@ pub struct FlightProduct {
     pub departure_time: chrono::DateTime<chrono::Utc>,
     pub arrival_time: chrono::DateTime<chrono::Utc>,
     pub available_seats: i32,
+    pub status: FlightStatus,
 }
 
 #[async_trait]

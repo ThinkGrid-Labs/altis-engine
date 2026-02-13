@@ -9,6 +9,15 @@ pub struct Config {
     pub kafka: KafkaConfig,
     pub auth: AuthConfig,
     pub business_rules: BusinessRules,
+    pub ranking: RankingConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RankingConfig {
+    pub conversion_weight: f64,
+    pub margin_weight: f64,
+    pub ml_experiment_percentage: f64,
+    pub ml_service_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

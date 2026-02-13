@@ -25,7 +25,7 @@ graph TD
     API -->|Generate| OfferGen[altis-offer: Rust]
     
     subgraph "AI Personalization Layer"
-        OfferGen -->|Features| AI_Client[gRPC Client]
+        OfferGen -->|Features + Segment| AI_Client[gRPC Client]
         AI_Client -->|Binary Proto| ML_Service[AI Model: Python]
         ML_Service -->|Probability| AI_Client
     end

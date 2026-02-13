@@ -12,6 +12,7 @@ serde = { version = "1.0", features = ["derive"] }
 altis-shared = { path = "../altis-shared" }
 thiserror = "2.0.18"
 async-trait = "0.1"
+tracing = "0.1"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde_json = "1.0"

@@ -22,6 +22,7 @@ services:
       DATABASE_URL: postgres://altis:password@postgres:5432/altis
       ALTIS__REDIS__URL: redis://redis:6379
       ALTIS__KAFKA__BROKERS: kafka:29092
+      ALTIS__RANKING__ML_SERVICE_URL: ${ALTIS_ML_SERVICE_URL:-http://ml-brain:50051}
     restart: on-failure
 
   postgres:

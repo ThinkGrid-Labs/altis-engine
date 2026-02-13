@@ -11,12 +11,21 @@ use crate::state::AppState;
 // Request/Response Types
 // ============================================================================
 
+#[derive(Debug, Serialize)]
+pub struct PaymentIntentResponse {
+    pub intent_id: String,
+    pub amount: i32,
+    pub currency: String,
+    pub client_secret: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderResponse {
     pub id: Uuid,
     pub offer_id: Option<Uuid>,
     pub customer_id: String,
     pub customer_email: Option<String>,
+    pub customer_did: Option<String>,
     pub status: String,
     pub items: Vec<OrderItemResponse>,
     pub total_nuc: i32,
@@ -31,6 +40,10 @@ pub struct OrderItemResponse {
     pub name: String,
     pub price_nuc: i32,
     pub status: String,
+    pub revenue_status: String,
+    pub operating_carrier_id: Option<Uuid>,
+    pub net_rate_nuc: Option<i32>,
+    pub commission_nuc: Option<i32>,
     pub metadata: serde_json::Value,
 }
 
@@ -38,6 +51,12 @@ pub struct OrderItemResponse {
 pub struct PayOrderRequest {
     pub payment_method: String,
     pub payment_token: String,
+    pub payment_reference: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AcceptReaccommodationRequest {
+    pub selected_item_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,7 +136,7 @@ pub async fn get_order(
 pub async fn pay_order(
     State(state): State<AppState>,
     Path(order_id): Path<Uuid>,
-    Json(_req): Json<PayOrderRequest>,
+    Json(req): Json<PayOrderRequest>,
 ) -> Result<Json<OrderResponse>, StatusCode> {
     // 1. Get order to verify exists
     let order_json = state.order_repo.get_order(order_id).await
@@ -127,7 +146,28 @@ pub async fn pay_order(
     let mut order: OrderResponse = serde_json::from_value(order_json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // 2. Process pay (Mock payment logic, but update DB status)
+    // 2. Process pay via Orchestrator
+    let intent = altis_core::payment::PaymentIntent {
+        id: format!("pi_{}", order_id.simple()),
+        order_id,
+        amount: order.total_nuc,
+        currency: order.currency.clone(),
+        status: altis_core::payment::PaymentStatus::RequiresPaymentMethod,
+        reference: req.payment_reference.clone(),
+        client_secret: None,
+        created_at: chrono::Utc::now(),
+    };
+
+    let payment_status = state.payment_orchestrator.process_payment(&intent).await
+        .map_err(|e| {
+            tracing::error!("Payment Orchestration Failed: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR // This will be caught by CB middleware
+        })?;
+
+    if payment_status != altis_core::payment::PaymentStatus::Succeeded {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+
     state.order_repo.update_order_status(order_id, "PAID").await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -167,6 +207,36 @@ pub async fn pay_order(
     // 4. Return updated order
     order.status = "PAID".to_string();
     Ok(Json(order))
+}
+
+/// POST /v1/orders/:id/payment-intent
+/// Initialize a payment intent for the order
+pub async fn initialize_payment_intent(
+    State(state): State<AppState>,
+    Path(order_id): Path<Uuid>,
+) -> Result<Json<PaymentIntentResponse>, StatusCode> {
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let order: OrderResponse = serde_json::from_value(order_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let intent = state.payment_orchestrator.initialize_payment(
+        order_id, 
+        order.total_nuc, 
+        &order.currency
+    ).await.map_err(|e| {
+        tracing::error!("Failed to initialize payment: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(PaymentIntentResponse {
+        intent_id: intent.id,
+        amount: intent.amount,
+        currency: intent.currency,
+        client_secret: intent.client_secret,
+    }))
 }
 
 /// POST /v1/orders/:id/customize
@@ -256,21 +326,54 @@ pub async fn consume_fulfillment(
     Path(barcode): Path<String>,
     Json(req): Json<ConsumeFulfillmentRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    // 1. Get fulfillment to find order/amount
-    // For simplicity in this phase, we skip the lookup and log basic settlement
-    // In production, we'd fetch the order_item price
-    
-    state.order_repo.consume_fulfillment(&barcode, &req.location).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // 1. Consume fulfillment and get IDs
+    let (order_id, item_id) = state.order_repo.consume_fulfillment(&barcode, &req.location).await
+        .map_err(|e| {
+            tracing::error!("Failed to consume fulfillment for barcode {}: {:?}", barcode, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    // 2. Log Settlement (Consumption)
-    let _ = state.telemetry.log_settlement(altis_shared::models::events::SettlementEvent {
-        order_id: Uuid::new_v4(), // Placeholder or from lookup
-        amount_nuc: 0, 
-        currency: "NUC".to_string(),
-        event_type: "CONSUMPTION".to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
-    }).await;
+    // 2. Fetch order to get price and current status
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch order {} after consumption: {:?}", order_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or_else(|| {
+            tracing::error!("Order {} not found after consumption", order_id);
+            StatusCode::NOT_FOUND
+        })?;
+
+    let order: altis_order::Order = serde_json::from_value(order_json.clone())
+        .map_err(|e| {
+            tracing::error!("Failed to deserialize order {} after consumption. Full JSON: {:?}. Error: {:?}", order_id, order_json, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // 3. Recognize Revenue
+    let financial_mgr = altis_order::finance::FinancialManager::new();
+    if let Some(entry) = financial_mgr.recognize_revenue(&order, item_id) {
+        // Save Ledger Entry
+        let _ = state.order_repo.add_order_ledger_entry(
+            entry.order_id,
+            entry.order_item_id,
+            &entry.transaction_type,
+            entry.amount_nuc,
+            entry.description.as_deref(),
+        ).await;
+
+        // Update Revenue Status to EARNED
+        let _ = state.order_repo.update_item_revenue_status(item_id, "EARNED").await;
+
+        // 4. Log Settlement (Consumption)
+        let _ = state.telemetry.log_settlement(altis_shared::models::events::SettlementEvent {
+            order_id,
+            amount_nuc: entry.amount_nuc,
+            currency: order.currency.clone(),
+            event_type: "REVENUE_RECOGNITION".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+        }).await;
+    }
     
     Ok(StatusCode::OK)
 }
@@ -308,6 +411,10 @@ pub async fn reshop_order(
             name: product["name"].as_str().unwrap_or("Extra Product").to_string(),
             price_nuc: price,
             status: "CONFIRMED".to_string(),
+            revenue_status: "UNEARNED".to_string(),
+            operating_carrier_id: None,
+            net_rate_nuc: None,
+            commission_nuc: None,
             metadata: product["metadata"].clone(),
         });
     }
@@ -319,4 +426,61 @@ pub async fn reshop_order(
         additional_nuc,
         items_to_add,
     }))
+}
+
+/// POST /v1/orders/:id/accept-reaccommodation
+/// Accept proposed re-accommodation items
+pub async fn accept_reaccommodation(
+    State(state): State<AppState>,
+    Path(order_id): Path<Uuid>,
+    Json(req): Json<AcceptReaccommodationRequest>,
+) -> Result<Json<OrderResponse>, StatusCode> {
+    // 1. Fetch current order
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // 2. Process acceptance (Mock logic)
+    // In a real repo, we'd update specific item statuses
+    let _ = state.order_repo.add_order_change(
+        order_id,
+        "REACCOMMODATION_ACCEPTED",
+        None,
+        Some(serde_json::json!({"accepted_items": req.selected_item_ids})),
+        "CUSTOMER",
+        Some("Customer accepted alternative flight")
+    ).await;
+
+    // 3. Return updated order
+    let updated_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let response: OrderResponse = serde_json::from_value(updated_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(Json(response))
+}
+
+/// POST /v1/orders/:id/involuntary-refund
+/// Process a full refund for a disrupted flight (zero fees)
+pub async fn involuntary_refund(
+    State(state): State<AppState>,
+    Path(order_id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    // 1. Update order status to CANCELLED
+    state.order_repo.update_order_status(order_id, "CANCELLED").await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 2. Log Audit Change
+    let _ = state.order_repo.add_order_change(
+        order_id,
+        "INVOLUNTARY_REFUND",
+        None,
+        None,
+        "SYSTEM",
+        Some("Full refund processed due to flight disruption")
+    ).await;
+
+    Ok(StatusCode::OK)
 }

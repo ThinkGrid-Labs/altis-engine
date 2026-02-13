@@ -300,11 +300,15 @@ services:
 
 ## Future Enhancements
 
-### Phase 2: ML Integration
+### Phase 1: Dynamic Merchandising (DONE)
+- Rule-based bundling engine
+- Segment-aware continuous pricing
+- AI Hybrid Ranking (Rules + ML Experimentation)
 
-- Real-time conversion prediction
-- Personalized offer ranking
-- Dynamic pricing optimization
+### Phase 2: Disruption & Involuntary Servicing
+- Automated re-accommodation logic
+- Involuntary refund handling
+- Flight status change notifications
 
 ### Phase 3: Advanced Features
 

@@ -19,6 +19,21 @@ pub struct SearchOffersRequest {
     pub return_date: Option<String>,
     pub passengers: u32,
     pub cabin_class: Option<String>,
+    pub user_segment: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AcceptReaccommodationRequest {
+    pub selected_item_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReshopOrderResponse {
+    pub id: Uuid,
+    pub items: Vec<OfferItemResponse>,
+    pub total_nuc: i32,
+    pub currency: String,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -56,15 +71,16 @@ pub async fn search_offers(
     Json(req): Json<SearchOffersRequest>,
 ) -> Result<Json<Vec<OfferResponse>>, StatusCode> {
     // 1. Build search context
-    let domain_context = altis_offer::features::SearchContext {
+    let search_context = altis_offer::features::SearchContext {
         origin: req.origin.clone(),
         destination: req.destination.clone(),
         departure_date: req.departure_date.clone(),
-        passengers: req.passengers as i32,
-        cabin_class: req.cabin_class.clone(),
+        passengers: req.passengers as i32, // Assuming SearchContext still expects i32
+        cabin_class: None, // TODO: Pull from request if available
+        user_segment: req.user_segment.clone(),
     };
 
-    let search_context_json = serde_json::to_value(&domain_context).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let search_context_json = serde_json::to_value(&search_context).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     // 2. Fetch products from catalog
     // Dynamically find AirAltis LCC (AL) ID
@@ -81,70 +97,47 @@ pub async fn search_offers(
         })?;
 
     // Helper to find product by code
-    let find_product = |code: &str| {
+    let _find_product = |code: &str| {
         products.iter().find(|p| p["product_code"].as_str() == Some(code))
     };
 
-    // 3. Generate offers (Flight-Only, Comfort, Premium)
-    let mut offers = Vec::new();
-    
-    // Flight-Only offer
-    let mut flight_only = altis_offer::Offer::new(None, Some(airline_id), search_context_json.clone());
-    flight_only.add_item(altis_offer::OfferItem::new(
-        "FLIGHT".to_string(),
-        None,
-        Some("FLIGHT-BASE".to_string()),
-        format!("{} to {}", req.origin, req.destination),
-        Some(format!("Direct flight on {}", req.departure_date)),
-        5000, // Budget price for regional SIN flight
-        req.passengers as i32,
-        serde_json::json!({"origin": req.origin, "destination": req.destination}),
-    ));
-    offers.push(flight_only);
-    
-    // Comfort Bundle
-    let mut comfort = altis_offer::Offer::new(None, Some(airline_id), search_context_json.clone());
-    comfort.add_item(altis_offer::OfferItem::new(
-        "FLIGHT".to_string(),
-        None,
-        Some("FLIGHT-BASE".to_string()),
-        format!("{} to {}", req.origin, req.destination),
-        None,
-        5000,
-        req.passengers as i32,
-        serde_json::json!({}),
-    ));
-    
-    if let Some(seat) = find_product("LCC-SEAT-FRONTRW") {
-        comfort.add_item(altis_offer::OfferItem::new(
-            "SEAT".to_string(),
-            None,
-            Some("LCC-SEAT-FRONTRW".to_string()),
-            seat["name"].as_str().unwrap_or("Seat").to_string(),
-            seat["description"].as_str().map(|s| s.to_string()),
-            (seat["base_price_nuc"].as_i64().unwrap_or(2500) as f64 * 0.9) as i32,
-            req.passengers as i32,
-            seat["metadata"].clone(),
-        ));
-    }
+    // 3. Generate offers using dynamic OfferGenerator
+    let generator = altis_offer::generator::OfferGenerator::new(
+        altis_catalog::pricing::PricingEngine::new(altis_catalog::pricing::PricingConfig::default())
+    );
 
-    if let Some(meal) = find_product("LCC-MEAL-SNACK") {
-        comfort.add_item(altis_offer::OfferItem::new(
-            "MEAL".to_string(),
-            None,
-            Some("LCC-MEAL-SNACK".to_string()),
-            meal["name"].as_str().unwrap_or("Meal").to_string(),
-            meal["description"].as_str().map(|s| s.to_string()),
-            (meal["base_price_nuc"].as_i64().unwrap_or(800) as f64 * 0.9) as i32,
-            req.passengers as i32,
-            meal["metadata"].clone(),
-        ));
-    }
-    offers.push(comfort);
+    // Convert catalog products to domain Products
+    let domain_products: Vec<altis_catalog::Product> = products.into_iter().map(|p| {
+        altis_catalog::Product {
+            id: Uuid::parse_str(p["id"].as_str().unwrap_or_default()).unwrap_or_default(),
+            product_type: serde_json::from_value(p["product_type"].clone()).unwrap_or(altis_catalog::ProductType::Flight),
+            product_code: p["product_code"].as_str().unwrap_or_default().to_string(),
+            name: p["name"].as_str().unwrap_or_default().to_string(),
+            description: p["description"].as_str().map(|s| s.to_string()),
+            base_price_nuc: p["base_price_nuc"].as_i64().unwrap_or(0) as i32,
+            margin_percentage: p["margin_percentage"].as_f64().unwrap_or(0.15),
+            is_active: p["is_active"].as_bool().unwrap_or(true),
+            metadata: p["metadata"].clone(),
+        }
+    }).collect();
+
+    let (flights, ancillaries): (Vec<_>, Vec<_>) = domain_products.into_iter()
+        .partition(|p| p.product_type == altis_catalog::ProductType::Flight);
+
+    let mut offers = generator.generate_offers(
+        None, // customer_id
+        req.user_segment.clone(),
+        search_context_json.clone(),
+        flights,
+        ancillaries,
+    ).await.map_err(|e| {
+        tracing::error!("Offer generation failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     
     // 4. AI Ranking
     let mut ranker = state.ranker.lock().await;
-    ranker.rank_offers_with_context(&domain_context, &mut offers).await;
+    ranker.rank_offers_with_context(&search_context, &mut offers).await;
     
     // 5. Save generated offers to repository (for retrieval on accept)
     for offer in &offers {
@@ -212,6 +205,7 @@ pub async fn get_offer(
 /// Accept an offer and create an order
 pub async fn accept_offer(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::middleware::auth::CustomerClaims>,
     Path(offer_id): Path<Uuid>,
     Json(req): Json<AcceptOfferRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -231,9 +225,17 @@ pub async fn accept_offer(
     }).await;
 
     // 3. Create Order
+    // If sub starts with did:, use it as customer_did
+    let (customer_id, customer_did) = if claims.sub.starts_with("did:") {
+        (format!("DID-{}", &claims.sub.chars().take(12).collect::<String>()), Some(claims.sub.clone()))
+    } else {
+        (claims.sub.clone(), None)
+    };
+
     let order_id = state.order_repo.create_order(&serde_json::json!({
-        "customer_id": req.customer_email,
+        "customer_id": customer_id,
         "customer_email": req.customer_email,
+        "customer_did": customer_did,
         "offer_id": offer_id,
         "status": "PROPOSED",
         "total_nuc": offer.total_nuc,

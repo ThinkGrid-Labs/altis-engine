@@ -27,6 +27,7 @@ struct ProductRow {
     #[allow(dead_code)]
     currency: Option<String>, 
     is_active: Option<bool>,
+    margin_percentage: Option<f64>,
     metadata: Option<Value>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -58,8 +59,8 @@ impl ProductRepository for StoreProductRepository {
 
         sqlx::query!(
             r#"
-            INSERT INTO products (id, airline_id, product_type, product_code, name, description, base_price_nuc, is_active, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO products (id, airline_id, product_type, product_code, name, description, base_price_nuc, is_active, margin_percentage, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
             product_id,
             airline_id,
@@ -69,6 +70,7 @@ impl ProductRepository for StoreProductRepository {
             description,
             base_price_nuc,
             is_active,
+            product["margin_percentage"].as_f64().unwrap_or(0.15),
             metadata
         )
         .execute(&self.pool)
@@ -84,7 +86,7 @@ impl ProductRepository for StoreProductRepository {
         // Use query_as! for strict typing
         let row = sqlx::query_as!(
             ProductRow,
-            "SELECT id, airline_id, product_type, product_code, name, description, base_price_nuc, currency, is_active, metadata, created_at, updated_at FROM products WHERE id = $1",
+            "SELECT id, airline_id, product_type, product_code, name, description, base_price_nuc, currency, is_active, margin_percentage::FLOAT8, metadata, created_at, updated_at FROM products WHERE id = $1",
             id
         )
         .fetch_optional(&self.pool)
@@ -118,7 +120,7 @@ impl ProductRepository for StoreProductRepository {
         let products: Vec<ProductRow> = if let Some(pt) = product_type {
             sqlx::query_as!(
                 ProductRow,
-                "SELECT id, airline_id, product_type, product_code, name, description, base_price_nuc, currency, is_active, metadata, created_at, updated_at FROM products WHERE airline_id = $1 AND product_type = $2 ORDER BY name",
+                "SELECT id, airline_id, product_type, product_code, name, description, base_price_nuc, currency, is_active, margin_percentage::FLOAT8, metadata, created_at, updated_at FROM products WHERE airline_id = $1 AND product_type = $2 ORDER BY name",
                 airline_id,
                 pt
             )
@@ -127,7 +129,7 @@ impl ProductRepository for StoreProductRepository {
         } else {
             sqlx::query_as!(
                 ProductRow,
-                "SELECT id, airline_id, product_type, product_code, name, description, base_price_nuc, currency, is_active, metadata, created_at, updated_at FROM products WHERE airline_id = $1 ORDER BY name",
+                "SELECT id, airline_id, product_type, product_code, name, description, base_price_nuc, currency, is_active, margin_percentage::FLOAT8, metadata, created_at, updated_at FROM products WHERE airline_id = $1 ORDER BY name",
                 airline_id
             )
             .fetch_all(&self.pool)

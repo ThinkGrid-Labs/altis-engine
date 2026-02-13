@@ -85,7 +85,7 @@ pub trait OrderRepository: Send + Sync {
         &self,
         barcode: &str,
         location: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<(Uuid, Uuid), Box<dyn std::error::Error + Send + Sync>>;
 
     async fn add_order_change(
         &self,
@@ -96,6 +96,31 @@ pub trait OrderRepository: Send + Sync {
         changed_by: &str,
         reason: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn find_orders_by_flight(
+        &self,
+        flight_id: &str,
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn add_order_ledger_entry(
+        &self,
+        order_id: Uuid,
+        order_item_id: Uuid,
+        transaction_type: &str,
+        amount_nuc: i32,
+        description: Option<&str>,
+    ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn update_item_revenue_status(
+        &self,
+        item_id: Uuid,
+        status: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn get_order_ledger(
+        &self,
+        order_id: Uuid,
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Generic repository trait for product catalog access

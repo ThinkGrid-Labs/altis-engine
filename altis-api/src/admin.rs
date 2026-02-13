@@ -83,6 +83,12 @@ pub struct ListProductsQuery {
     pub is_active: Option<bool>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TriggerDisruptionRequest {
+    pub flight_id: Uuid,
+    pub new_status: String, // DELAYED, CANCELLED
+}
+
 // ============================================================================
 // Product Management Handlers
 // ============================================================================
@@ -343,4 +349,68 @@ pub async fn delete_bundle(
 ) -> Result<StatusCode, StatusCode> {
     // TODO: Implement bundle deletion
     Ok(StatusCode::NO_CONTENT)
+}
+pub async fn trigger_disruption(
+    State(state): State<AppState>,
+    Json(req): Json<TriggerDisruptionRequest>,
+) -> Result<StatusCode, StatusCode> {
+    // 1. Fetch flight details to know origin/destination
+    let flight_json = state.catalog_repo.get_product(req.flight_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let origin = flight_json["metadata"]["origin"].as_str().unwrap_or_default();
+    let destination = flight_json["metadata"]["destination"].as_str().unwrap_or_default();
+    let airline_id = Uuid::parse_str(flight_json["airline_id"].as_str().unwrap_or_default()).unwrap_or_default();
+
+    // 2. Find all affected orders
+    let affected_orders = state.order_repo.find_orders_by_flight(&req.flight_id.to_string()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    tracing::info!("Found {} affected orders for flight {} ({}-{})", affected_orders.len(), req.flight_id, origin, destination);
+
+    // 3. Search for alternative flight (same route, different ID)
+    let alt_flights = state.catalog_repo.list_products(airline_id, Some("FLIGHT")).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let alternative = alt_flights.iter()
+        .find(|f| {
+            f["metadata"]["origin"] == origin && 
+            f["metadata"]["destination"] == destination && 
+            f["id"] != req.flight_id.to_string()
+        });
+
+    // 4. Update orders
+    for order_val in affected_orders {
+        let order_id = Uuid::parse_str(order_val["id"].as_str().unwrap_or_default()).unwrap_or_default();
+        
+        // Log Audit Change
+        let _ = state.order_repo.add_order_change(
+            order_id,
+            "FLIGHT_DISRUPTION",
+            None,
+            Some(serde_json::json!({"flight_id": req.flight_id, "new_status": req.new_status})),
+            "ADMIN",
+            Some("Flight disruption triggered by admin")
+        ).await;
+
+        // Add Re-accommodation if alternative found
+        if let Some(alt) = alternative {
+            let mut metadata = alt["metadata"].clone();
+            metadata["disrupted_flight_id"] = serde_json::json!(req.flight_id.to_string());
+            
+            let reac_item = serde_json::json!({
+                "product_type": "FLIGHT",
+                "product_id": alt["id"],
+                "name": alt["name"],
+                "price_nuc": 0, // Involuntary re-accommodation is free
+                "status": "REACCOMMODATED",
+                "metadata": metadata
+            });
+
+            let _ = state.order_repo.add_order_item(order_id, &reac_item).await;
+        }
+    }
+
+    Ok(StatusCode::OK)
 }

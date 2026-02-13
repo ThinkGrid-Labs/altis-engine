@@ -14,35 +14,15 @@ use ranking::{PredictConversionRequest, UserContext, SearchContext as ProtoSearc
 
 /// AI-driven offer ranking (initial rule-based implementation)
 pub struct OfferRanker {
-    config: RankingConfig,
+    config: altis_store::app_config::RankingConfig,
     telemetry: Option<Arc<OfferTelemetry>>,
     ml_client: Option<RankingServiceClient<Channel>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct RankingConfig {
-    /// Weight for conversion probability (0.0 - 1.0)
-    pub conversion_weight: f64,
-    
-    /// Weight for profit margin (0.0 - 1.0)
-    pub margin_weight: f64,
-    
-    /// Percentage of traffic for ML experiment (0.0 - 1.0)
-    pub ml_experiment_percentage: f64,
-}
-
-impl Default for RankingConfig {
-    fn default() -> Self {
-        Self {
-            conversion_weight: 0.6,
-            margin_weight: 0.4,
-            ml_experiment_percentage: 0.1, // 10% for ML by default
-        }
-    }
-}
+// Redundant local config removed, using altis_store::app_config::RankingConfig
 
 impl OfferRanker {
-    pub fn new(config: RankingConfig, telemetry: Option<Arc<OfferTelemetry>>, ml_client: Option<RankingServiceClient<Channel>>) -> Self {
+    pub fn new(config: altis_store::app_config::RankingConfig, telemetry: Option<Arc<OfferTelemetry>>, ml_client: Option<RankingServiceClient<Channel>>) -> Self {
         Self { config, telemetry, ml_client }
     }
     
@@ -120,6 +100,7 @@ impl OfferRanker {
                 departure_date: context.departure_date.clone(),
                 passengers: context.passengers,
                 cabin_class: context.cabin_class.clone().unwrap_or_default(),
+                user_segment: context.user_segment.clone().unwrap_or_default(),
             }),
             offer_features: Some(ProtoOfferFeatures {
                 offer_id: offer.id.to_string(),
@@ -170,10 +151,25 @@ impl OfferRanker {
     
     /// Calculate profit margin score
     fn calculate_margin_score(&self, offer: &Offer) -> f64 {
-        // Normalize total price to 0-1 scale
-        // Higher price = higher margin (simplified)
+        // Higher score for offers with higher margin percentage
+        // Average margin percentage across all items
+        let mut total_margin = 0.0;
+        let item_count = offer.items.len();
+        
+        if item_count == 0 { return 0.0; }
+
+        for item in &offer.items {
+            // Try to get margin_percentage from metadata (product repository should have populated this)
+            let margin = item.metadata["margin_percentage"].as_f64().unwrap_or(0.15); // Default 15%
+            total_margin += margin;
+        }
+
+        let avg_margin = total_margin / item_count as f64;
+        
+        // Combine average margin % with total price to prioritize high-value/high-margin bundles
         let normalized_price = (offer.total_nuc as f64 / 100000.0).min(1.0);
-        normalized_price
+        
+        (avg_margin * 0.7) + (normalized_price * 0.3)
     }
     
     /// Future: ML model integration stub
@@ -194,7 +190,13 @@ mod tests {
     
     #[tokio::test]
     async fn test_offer_ranking() {
-        let mut ranker = OfferRanker::new(RankingConfig::default(), None, None);
+        let config = altis_store::app_config::RankingConfig {
+            conversion_weight: 0.6,
+            margin_weight: 0.4,
+            ml_experiment_percentage: 0.0,
+            ml_service_url: None,
+        };
+        let mut ranker = OfferRanker::new(config, None, None);
         
         let mut offers = vec![
             create_test_offer(1, 10000), // Flight-only, low price
@@ -208,6 +210,7 @@ mod tests {
             departure_date: "2024-12-01".to_string(),
             passengers: 1,
             cabin_class: None,
+            user_segment: None,
         };
 
         ranker.rank_offers_with_context(&context, &mut offers).await;

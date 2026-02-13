@@ -27,6 +27,7 @@ struct OrderRow {
     currency: Option<String>,
     payment_method: Option<String>,
     payment_reference: Option<String>,
+    customer_did: Option<String>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -44,9 +45,25 @@ struct OrderItemRow {
     price_nuc: i32,
     quantity: Option<i32>,
     status: Option<String>,
+    revenue_status: Option<String>,
+    operating_carrier_id: Option<Uuid>,
+    net_rate_nuc: Option<i32>,
+    commission_nuc: Option<i32>,
     metadata: Option<Value>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(sqlx::FromRow)]
+struct LedgerRow {
+    id: Uuid,
+    order_id: Uuid,
+    order_item_id: Uuid,
+    transaction_type: String,
+    amount_nuc: i32,
+    currency: Option<String>,
+    description: Option<String>,
+    created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -75,7 +92,7 @@ impl OrderRepository for StoreOrderRepository {
             Uuid::new_v4()
         };
 
-        let customer_id = order["customer_id"].as_str().ok_or("Missing customer_id")?;
+        let customer_id = order["customer_id"].as_str().ok_or(String::from("Missing customer id"))?;
         let customer_email = order["customer_email"].as_str();
         
         let offer_id_str = order["offer_id"].as_str();
@@ -89,25 +106,27 @@ impl OrderRepository for StoreOrderRepository {
         let currency = order["currency"].as_str().unwrap_or("NUC");
         let payment_method = order["payment_method"].as_str();
         let payment_reference = order["payment_reference"].as_str();
+        let customer_did = order["customer_did"].as_str();
 
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO orders (id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO orders (id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, customer_did)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
-            order_id,
-            customer_id,
-            customer_email,
-            offer_id,
-            airline_id,
-            status,
-            total_nuc,
-            currency,
-            payment_method,
-            payment_reference
         )
+        .bind(order_id)
+        .bind(customer_id)
+        .bind(customer_email)
+        .bind(offer_id)
+        .bind(airline_id)
+        .bind(status)
+        .bind(total_nuc)
+        .bind(currency)
+        .bind(payment_method)
+        .bind(payment_reference)
+        .bind(customer_did)
         .execute(&mut *tx)
         .await?;
 
@@ -129,25 +148,33 @@ impl OrderRepository for StoreOrderRepository {
                 let price_nuc = item["price_nuc"].as_i64().unwrap_or(0) as i32;
                 let quantity = item["quantity"].as_i64().unwrap_or(1) as i32;
                 let item_status = item["status"].as_str().unwrap_or("ACTIVE");
+                let operating_carrier_id_str = item["operating_carrier_id"].as_str();
+                let operating_carrier_id = if let Some(id) = operating_carrier_id_str { Some(Uuid::parse_str(id)?) } else { None };
+                let net_rate_nuc = item["net_rate_nuc"].as_i64().map(|v| v as i32);
+                let commission_nuc = item["commission_nuc"].as_i64().map(|v| v as i32);
                 let metadata = &item["metadata"];
 
-                sqlx::query!(
+                sqlx::query(
                     r#"
-                    INSERT INTO order_items (id, order_id, product_id, product_type, product_code, name, description, price_nuc, quantity, status, metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    INSERT INTO order_items (id, order_id, product_id, product_type, product_code, name, description, price_nuc, quantity, status, revenue_status, operating_carrier_id, net_rate_nuc, commission_nuc, metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                     "#,
-                    item_id,
-                    order_id,
-                    product_id,
-                    product_type,
-                    product_code,
-                    name,
-                    description,
-                    price_nuc,
-                    quantity,
-                    item_status,
-                    metadata
                 )
+                .bind(item_id)
+                .bind(order_id)
+                .bind(product_id)
+                .bind(product_type)
+                .bind(product_code)
+                .bind(name)
+                .bind(description)
+                .bind(price_nuc)
+                .bind(quantity)
+                .bind(item_status)
+                .bind("UNEARNED")
+                .bind(operating_carrier_id)
+                .bind(net_rate_nuc)
+                .bind(commission_nuc)
+                .bind(metadata)
                 .execute(&mut *tx)
                 .await?;
             }
@@ -162,20 +189,18 @@ impl OrderRepository for StoreOrderRepository {
         &self,
         id: Uuid,
     ) -> Result<Option<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        let order_row = sqlx::query_as!(
-            OrderRow,
-            "SELECT id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, created_at, updated_at FROM orders WHERE id = $1",
-            id
+        let order_row = sqlx::query_as::<_, OrderRow>(
+            "SELECT id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, customer_did, created_at, updated_at FROM orders WHERE id = $1"
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = order_row {
-            let items_rows: Vec<OrderItemRow> = sqlx::query_as!(
-                OrderItemRow,
-                "SELECT id, order_id, product_id, product_type, product_code, name, description, price_nuc, quantity, status, metadata, created_at, updated_at FROM order_items WHERE order_id = $1",
-                id
+            let items_rows = sqlx::query_as::<_, OrderItemRow>(
+                "SELECT id, order_id, product_id, product_type, product_code, name, description, price_nuc, quantity, status, revenue_status, operating_carrier_id, net_rate_nuc, commission_nuc, metadata, created_at, updated_at FROM order_items WHERE order_id = $1"
             )
+            .bind(id)
             .fetch_all(&self.pool)
             .await?;
 
@@ -190,17 +215,20 @@ impl OrderRepository for StoreOrderRepository {
                     "price_nuc": item.price_nuc,
                     "quantity": item.quantity,
                     "status": item.status,
+                    "revenue_status": item.revenue_status,
+                    "operating_carrier_id": item.operating_carrier_id,
+                    "net_rate_nuc": item.net_rate_nuc,
+                    "commission_nuc": item.commission_nuc,
                     "metadata": item.metadata,
-                    "created_at": item.created_at.map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339()),
-                    "updated_at": item.updated_at.map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339())
+                    "created_at": item.created_at.map(|t| t.to_rfc3339()),
+                    "updated_at": item.updated_at.map(|t| t.to_rfc3339())
                 })
             }).collect();
 
-            let fulfillment_rows: Vec<FulfillmentRow> = sqlx::query_as!(
-                FulfillmentRow,
-                "SELECT id, order_id, order_item_id, fulfillment_type, barcode, qr_code_data, delivery_method, delivered_at, created_at FROM fulfillment WHERE order_id = $1",
-                id
+            let fulfillment_rows = sqlx::query_as::<_, FulfillmentRow>(
+                "SELECT id, order_id, order_item_id, fulfillment_type, barcode, qr_code_data, delivery_method, delivered_at, created_at FROM fulfillment WHERE order_id = $1"
             )
+            .bind(id)
             .fetch_all(&self.pool)
             .await?;
 
@@ -212,8 +240,8 @@ impl OrderRepository for StoreOrderRepository {
                     "barcode": f.barcode,
                     "qr_code_data": f.qr_code_data,
                     "delivery_method": f.delivery_method,
-                    "delivered_at": f.delivered_at.map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339()),
-                    "created_at": f.created_at.map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339())
+                    "delivered_at": f.delivered_at.map(|t| t.to_rfc3339()),
+                    "created_at": f.created_at.map(|t| t.to_rfc3339())
                 })
             }).collect();
 
@@ -228,10 +256,11 @@ impl OrderRepository for StoreOrderRepository {
                 "currency": row.currency,
                 "payment_method": row.payment_method,
                 "payment_reference": row.payment_reference,
+                "customer_did": row.customer_did,
                 "items": items,
                 "fulfillment": fulfillment,
-                "created_at": row.created_at.map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339()),
-                "updated_at": row.updated_at.map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339())
+                "created_at": row.created_at.map(|t| t.to_rfc3339()),
+                "updated_at": row.updated_at.map(|t| t.to_rfc3339())
             });
 
             return Ok(Some(order_json));
@@ -245,11 +274,11 @@ impl OrderRepository for StoreOrderRepository {
         id: Uuid,
         status: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        sqlx::query!(
+        sqlx::query(
             "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2",
-            status,
-            id
         )
+        .bind(status)
+        .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -271,26 +300,34 @@ impl OrderRepository for StoreOrderRepository {
         let description = item["description"].as_str();
         let price_nuc = item["price_nuc"].as_i64().unwrap_or(0) as i32;
         let quantity = item["quantity"].as_i64().unwrap_or(1) as i32;
-        let status = "ACTIVE";
+        let status = String::from("ACTIVE");
+        let operating_carrier_id_str = item["operating_carrier_id"].as_str();
+        let operating_carrier_id = if let Some(id) = operating_carrier_id_str { Some(Uuid::parse_str(id)?) } else { None };
+        let net_rate_nuc = item["net_rate_nuc"].as_i64().map(|v| v as i32);
+        let commission_nuc = item["commission_nuc"].as_i64().map(|v| v as i32);
         let metadata = &item["metadata"];
 
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT INTO order_items (id, order_id, product_id, product_type, product_code, name, description, price_nuc, quantity, status, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO order_items (id, order_id, product_id, product_type, product_code, name, description, price_nuc, quantity, status, revenue_status, operating_carrier_id, net_rate_nuc, commission_nuc, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             "#,
-            item_id,
-            order_id,
-            product_id,
-            product_type,
-            product_code,
-            name,
-            description,
-            price_nuc,
-            quantity,
-            status,
-            metadata
         )
+        .bind(item_id)
+        .bind(order_id)
+        .bind(product_id)
+        .bind(product_type)
+        .bind(product_code)
+        .bind(name)
+        .bind(description)
+        .bind(price_nuc)
+        .bind(quantity)
+        .bind(status)
+        .bind("UNEARNED")
+        .bind(operating_carrier_id)
+        .bind(net_rate_nuc)
+        .bind(commission_nuc)
+        .bind(metadata)
         .execute(&self.pool)
         .await?;
 
@@ -301,16 +338,17 @@ impl OrderRepository for StoreOrderRepository {
         &self,
         customer_id: &str,
     ) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        let rows = sqlx::query!(
+        let rows = sqlx::query(
             "SELECT id FROM orders WHERE customer_id = $1 ORDER BY created_at DESC",
-            customer_id
         )
+        .bind(customer_id)
         .fetch_all(&self.pool)
         .await?;
 
         let mut orders = Vec::new();
         for row in rows {
-            if let Some(order) = self.get_order(row.id).await? {
+            let id: Uuid = sqlx::Row::get(&row, "id");
+            if let Some(order) = self.get_order(id).await? {
                 orders.push(order);
             }
         }
@@ -326,17 +364,17 @@ impl OrderRepository for StoreOrderRepository {
     ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>> {
         let fulfillment_id = Uuid::new_v4();
         
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO fulfillment (id, order_id, order_item_id, fulfillment_type, barcode)
             VALUES ($1, $2, $3, $4, $5)
             "#,
-            fulfillment_id,
-            order_id,
-            order_item_id,
-            fulfillment_type,
-            barcode
         )
+        .bind(fulfillment_id)
+        .bind(order_id)
+        .bind(order_item_id)
+        .bind(fulfillment_type)
+        .bind(barcode)
         .execute(&self.pool)
         .await?;
 
@@ -347,20 +385,24 @@ impl OrderRepository for StoreOrderRepository {
         &self,
         barcode: &str,
         location: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        sqlx::query(
+    ) -> Result<(Uuid, Uuid), Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query(
             r#"
             UPDATE fulfillment 
             SET consumed_at = NOW(), consumption_location = $2
             WHERE barcode = $1
-            "#
+            RETURNING order_id, order_item_id
+            "#,
         )
         .bind(barcode)
         .bind(location)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        Ok(())
+        Ok((
+            sqlx::Row::get(&row, "order_id"),
+            sqlx::Row::get(&row, "order_item_id"),
+        ))
     }
 
     async fn add_order_change(
@@ -388,5 +430,93 @@ impl OrderRepository for StoreOrderRepository {
         .await?;
 
         Ok(())
+    }
+
+    async fn find_orders_by_flight(
+        &self,
+        flight_id: &str,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows = sqlx::query_as::<_, OrderRow>(
+            "SELECT id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, created_at, updated_at FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE metadata->>'flight_id' = $1)"
+        )
+        .bind(flight_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut orders = Vec::new();
+        for row in rows {
+            if let Some(order) = self.get_order(row.id).await? {
+                orders.push(order);
+            }
+        }
+        Ok(orders)
+    }
+
+    async fn add_order_ledger_entry(
+        &self,
+        order_id: Uuid,
+        order_item_id: Uuid,
+        transaction_type: &str,
+        amount_nuc: i32,
+        description: Option<&str>,
+    ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>> {
+        let entry_id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO order_ledger (id, order_id, order_item_id, transaction_type, amount_nuc, description)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            "#,
+        )
+        .bind(entry_id)
+        .bind(order_id)
+        .bind(order_item_id)
+        .bind(transaction_type)
+        .bind(amount_nuc)
+        .bind(description)
+        .execute(&self.pool)
+        .await?;
+        Ok(entry_id)
+    }
+
+    async fn update_item_revenue_status(
+        &self,
+        item_id: Uuid,
+        status: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            "UPDATE order_items SET revenue_status = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(status)
+        .bind(item_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_order_ledger(
+        &self,
+        order_id: Uuid,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows = sqlx::query_as::<_, LedgerRow>(
+            "SELECT id, order_id, order_item_id, transaction_type, amount_nuc, currency, description, created_at FROM order_ledger WHERE order_id = $1 ORDER BY created_at"
+        )
+        .bind(order_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let ledger = rows.into_iter().map(|row| {
+            serde_json::json!({
+                "id": row.id,
+                "order_id": row.order_id,
+                "order_item_id": row.order_item_id,
+                "transaction_type": row.transaction_type,
+                "amount_nuc": row.amount_nuc,
+                "currency": row.currency,
+                "description": row.description,
+                "created_at": row.created_at.as_ref().map(|t| t.to_rfc3339())
+            })
+        }).collect();
+
+        Ok(ledger)
     }
 }

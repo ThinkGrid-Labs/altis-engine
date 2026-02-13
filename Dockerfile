@@ -4,6 +4,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y cmake build-essential protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 RUN cargo install cargo-watch
+RUN cargo install sqlx-cli --no-default-features --features postgres
 COPY . .
 CMD ["cargo", "watch", "-x", "run"]
 

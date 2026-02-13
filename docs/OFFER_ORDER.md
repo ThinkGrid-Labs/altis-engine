@@ -245,25 +245,49 @@ let price = base_price × multiplier;
 
 ---
 
+## Search Offers Lifecycle
+
+The search process is the core of Altis's retailing capability. It transforms a physical inventory lookup into a set of personalized, high-value travel options.
+
+### 1. Request Contextualization
+The engine captures the itinerary and identifies the **User Segment** (e.g., "Premium", "Corporate"). This segment acts as the retailer's lens on the customer.
+
+### 2. Physical Inventory Lookup
+The `CatalogRepository` retrieves "physical" products:
+- **Flight Products**: Seats on the route.
+- **Ancillary Products**: Bags, Seats, Lounge, FastTrack.
+
+### 3. Dynamic Merchandising (Generator)
+The `OfferGenerator` acts as the merchant:
+- **Rule Evaluation**: The `RuleEngine` decides **what** to bundle (e.g., *if Premium, add Lounge*).
+- **Continuous Pricing**: Real-time price calculation with "Willingness to Pay" (WTP) multipliers and bundle discounts.
+
+### 4. AI Hybrid Ranking
+The `OfferRanker` decides the **Display Order**:
+- **ML Prediction**: Sends features and segments to an external AI via gRPC to predict **Conversion Probability**.
+- **Margin Optimization**: Factors in the `margin_percentage` to prioritize profit.
+- **Hybrid Strategy**: Configurable A/B testing between Rule-based and AI-based ranking.
+
+### 5. Persistence & Idempotency
+Offers are saved to Redis with a 15-minute TTL. This "locks" the price and bundle contents, ensuring that what the customer sees is what they get when they accept.
+
+---
+
 ## AI-Driven Offer Ranking
 
-### Rule-Based (Current)
+### Hybrid Architecture
+Altis uses a mix of static rules and machine learning to optimize the shelf.
 
-```rust
-let score = (conversion_probability × 0.6) + (profit_margin × 0.4);
-```
+| Type | Logic | Purpose |
+|------|-------|---------|
+| **Rule-Based** | `(conversion × 0.6) + (margin × 0.4)` | Baseline/Fallback |
+| **ML-Based** | `predicted_conversion × profit_margin` | Optimization |
 
-- **Conversion probability**: Estimated from item count (fewer = higher)
-- **Profit margin**: Normalized price (higher = better)
-
-### ML-Based (Future)
-
-Train a model on historical data:
-- **Features**: Route, dates, user profile, time-of-day
-- **Target**: Conversion (0/1)
-- **Output**: Probability score (0.0 - 1.0)
-
-Rank offers by: `predicted_conversion × profit_margin`
+### Features for ML
+The ranker extracts features from the search context and offer items:
+- **Itinerary**: Origin, Destination, Days until departure.
+- **Contextual**: User Segment, Weekend/Weekday, Passenger count.
+- **Offer Specific**: Price per passenger, item count, bundled ancillaries.
 
 ---
 

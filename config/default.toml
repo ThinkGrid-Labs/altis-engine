@@ -21,3 +21,9 @@ tax_rate = 0.10
 booking_fee = 2.50
 pricing_multiplier = 1.0
 pricing_adjustment = 0.0
+
+[ranking]
+conversion_weight = 0.6
+margin_weight = 0.4
+ml_experiment_percentage = 0.1
+ml_service_url = "http://localhost:50051"

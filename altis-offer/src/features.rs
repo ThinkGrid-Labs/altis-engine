@@ -9,6 +9,7 @@ pub struct SearchContext {
     pub departure_date: String,
     pub passengers: i32,
     pub cabin_class: Option<String>,
+    pub user_segment: Option<String>,
 }
 
 pub struct OfferFeatures {

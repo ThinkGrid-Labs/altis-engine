@@ -10,6 +10,7 @@ altis-shared = { path = "../altis-shared" }
 altis-offer = { path = "../altis-offer" }
 altis-order = { path = "../altis-order" }
 altis-catalog = { path = "../altis-catalog" }
+tonic = "0.12"
 tokio = { version = "1.0", features = ["full"] }
 axum = { version = "0.8.8", features = ["macros"] }
 tower = { version = "0.5.3", features = ["util"] }
@@ -28,3 +29,4 @@ thiserror = "2.0.18"
 axum-extra = { version = "0.12.5", features = ["typed-header"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros"] }
 rdkafka = { version = "0.39.0", features = ["cmake-build"] }
+prometheus = "0.13"
