@@ -83,6 +83,7 @@ To explore the engine's capabilities:
 1.  **Run with Docker**: `docker-compose up --build`
 2.  **Developer Guide**: See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for API usage and setup.
 3.  **Architecture Details**: Dive into our [Architecture Overview](docs/architecture/OVERVIEW.md).
+4.  **Roadmap**: Check out [ROADMAP.md](docs/ROADMAP.md) for the high-level project backlog.
 
 ---
 
