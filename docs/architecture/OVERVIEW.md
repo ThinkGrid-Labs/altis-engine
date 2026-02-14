@@ -95,7 +95,7 @@ All products share the same structure - enabling seamless bundling and pricing.
 sequenceDiagram
     participant C as Customer
     participant API as altis-api
-    participant OFF as altis-offer
+    participant OFFER as altis-offer
     participant CAT as altis-catalog
     participant ORD as altis-order
     participant DB as PostgreSQL
@@ -106,17 +106,17 @@ sequenceDiagram
     CAT->>R: Check inventory
     R-->>CAT: Available seats
     CAT-->>API: Product list
-    API->>OFF: Generate offers
-    OFF->>OFF: AI ranking
-    OFF->>R: Store offers (15min TTL)
-    OFF-->>API: Ranked offers
+    API->>OFFER: Generate offers
+    OFFER->>OFFER: AI ranking
+    OFFER->>R: Store offers (15min TTL)
+    OFFER-->>API: Ranked offers
     API-->>C: 3-5 offers
 
     C->>API: POST /v1/offers/{id}/accept
-    API->>OFF: Validate offer
-    OFF->>R: Check expiry (15m limit)
-    R-->>OFF: Valid
-    OFF->>CAT: Check & Reserve Inventory
+    API->>OFFER: Validate offer
+    OFFER->>R: Check expiry (15m limit)
+    R-->>OFFER: Valid
+    OFFER->>CAT: Check & Reserve Inventory
     CAT->>R: DECR availability (Hard Hold)
     R-->>CAT: Success (Seats held)
     CAT->>ORD: Create order
@@ -336,30 +336,3 @@ services:
 - **Cache**: Managed Redis (ElastiCache, Memorystore)
 - **Events**: Managed Kafka (MSK, Confluent Cloud)
 
----
-
-## Future Enhancements
-
-### Phase 1: Dynamic Merchandising (DONE)
-- Rule-based bundling engine
-- Segment-aware continuous pricing
-- AI Hybrid Ranking (Rules + ML Experimentation)
-
-### Phase 2: Disruption & Involuntary Servicing
-- Automated re-accommodation logic
-- Involuntary refund handling
-- Flight status change notifications
-
-### Phase 3: Advanced Features
-
-- Multi-currency support
-- Loyalty program integration
-- Group bookings
-- Corporate travel policies
-
-### Phase 4: Global Scale & Multi-Tenancy
-
-- Multi-region deployment
-- CDN for static assets
-- Edge caching for offers
-- Real-time inventory sync
