@@ -39,3 +39,6 @@ Thumbs.db
 !/docs/USAGE.md
 !/docs/DEVELOPMENT.md
 !/docs/ROADMAP.md
+!/docs/architecture/
+/docs/architecture/*
+!/docs/architecture/OVERVIEW.md
