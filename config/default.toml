@@ -16,7 +16,7 @@ jwt_secret = "super-secret-key-change-me"
 jwt_expiration_seconds = 86400 # 24 hours
 
 [business_rules]
-trip_hold_seconds = 600
+trip_hold_seconds = 1800 # 30 minutes
 seat_hold_seconds = 300
 tax_rate = 0.10
 booking_fee = 2.50

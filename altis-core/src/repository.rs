@@ -157,4 +157,10 @@ pub trait ProductRepository: Send + Sync {
         &self,
         code: &str,
     ) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn get_inventory_rule(
+        &self,
+        airline_id: Uuid,
+        resource_type: &str,
+    ) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error + Send + Sync>>;
 }

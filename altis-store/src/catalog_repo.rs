@@ -222,4 +222,34 @@ impl ProductRepository for StoreProductRepository {
 
         Ok(None)
     }
+
+    async fn get_inventory_rule(
+        &self,
+        airline_id: Uuid,
+        resource_type: &str,
+    ) -> Result<Option<Value>, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query!(
+            "SELECT id, airline_id, resource_type, hold_duration_seconds, overbooking_percentage::FLOAT8, min_availability_threshold, auto_release_on_expiry, notify_on_low_inventory, is_active FROM inventory_rules WHERE airline_id = $1 AND resource_type = $2 AND is_active = true",
+            airline_id,
+            resource_type
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            return Ok(Some(serde_json::json!({
+                "id": row.id,
+                "airline_id": row.airline_id,
+                "resource_type": row.resource_type,
+                "hold_duration_seconds": row.hold_duration_seconds,
+                "overbooking_percentage": row.overbooking_percentage,
+                "min_availability_threshold": row.min_availability_threshold,
+                "auto_release_on_expiry": row.auto_release_on_expiry,
+                "notify_on_low_inventory": row.notify_on_low_inventory,
+                "is_active": row.is_active
+            })));
+        }
+
+        Ok(None)
+    }
 }

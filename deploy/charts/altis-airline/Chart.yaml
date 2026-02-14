@@ -1,0 +1,6 @@
+apiVersion: v2
+name: altis-airline
+description: A Helm chart for deploying an isolated Altis Engine instance for a specific airline.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

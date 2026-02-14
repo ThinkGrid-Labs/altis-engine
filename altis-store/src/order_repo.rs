@@ -28,8 +28,25 @@ struct OrderRow {
     payment_method: Option<String>,
     payment_reference: Option<String>,
     customer_did: Option<String>,
+    contact_phone: Option<String>,
+    contact_first_name: Option<String>,
+    contact_last_name: Option<String>,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(sqlx::FromRow)]
+struct TravelerRow {
+    id: Uuid,
+    traveler_index: i32,
+    ptc: String,
+    first_name: String,
+    last_name: String,
+    date_of_birth: Option<chrono::NaiveDate>,
+    gender: Option<String>,
+    traveler_did: Option<String>,
+    metadata: Option<Value>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -108,12 +125,18 @@ impl OrderRepository for StoreOrderRepository {
         let payment_reference = order["payment_reference"].as_str();
         let customer_did = order["customer_did"].as_str();
 
+        let contact_phone = order["contact_phone"].as_str();
+        let contact_first_name = order["contact_first_name"].as_str();
+        let contact_last_name = order["contact_last_name"].as_str();
+        let expires_at_str = order["expires_at"].as_str();
+        let expires_at = expires_at_str.and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&chrono::Utc)));
+
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
             r#"
-            INSERT INTO orders (id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, customer_did)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO orders (id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, customer_did, contact_phone, contact_first_name, contact_last_name, expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             "#,
         )
         .bind(order_id)
@@ -127,8 +150,44 @@ impl OrderRepository for StoreOrderRepository {
         .bind(payment_method)
         .bind(payment_reference)
         .bind(customer_did)
+        .bind(contact_phone)
+        .bind(contact_first_name)
+        .bind(contact_last_name)
+        .bind(expires_at)
         .execute(&mut *tx)
         .await?;
+
+        if let Some(travelers) = order["travelers"].as_array() {
+            for traveler in travelers {
+                let traveler_index = traveler["traveler_index"].as_i64().unwrap_or(0) as i32;
+                let ptc = traveler["ptc"].as_str().unwrap_or("ADT");
+                let first_name = traveler["first_name"].as_str().unwrap_or("Unknown");
+                let last_name = traveler["last_name"].as_str().unwrap_or("Unknown");
+                let dob_str = traveler["date_of_birth"].as_str();
+                let dob = dob_str.and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+                let gender = traveler["gender"].as_str();
+                let traveler_did = traveler["traveler_did"].as_str();
+                let metadata = &traveler["metadata"];
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO travelers (order_id, traveler_index, ptc, first_name, last_name, date_of_birth, gender, traveler_did, metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    "#,
+                )
+                .bind(order_id)
+                .bind(traveler_index)
+                .bind(ptc)
+                .bind(first_name)
+                .bind(last_name)
+                .bind(dob)
+                .bind(gender)
+                .bind(traveler_did)
+                .bind(metadata)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
 
         if let Some(items) = order["items"].as_array() {
             for item in items {
@@ -190,7 +249,7 @@ impl OrderRepository for StoreOrderRepository {
         id: Uuid,
     ) -> Result<Option<Value>, Box<dyn std::error::Error + Send + Sync>> {
         let order_row = sqlx::query_as::<_, OrderRow>(
-            "SELECT id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, customer_did, created_at, updated_at FROM orders WHERE id = $1"
+            "SELECT id, customer_id, customer_email, offer_id, airline_id, status, total_nuc, currency, payment_method, payment_reference, customer_did, contact_phone, contact_first_name, contact_last_name, expires_at, created_at, updated_at FROM orders WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -245,10 +304,37 @@ impl OrderRepository for StoreOrderRepository {
                 })
             }).collect();
 
+            let traveler_rows = sqlx::query_as::<_, TravelerRow>(
+                "SELECT id, traveler_index, ptc, first_name, last_name, date_of_birth, gender, traveler_did, metadata FROM travelers WHERE order_id = $1"
+            )
+            .bind(id)
+            .fetch_all(&self.pool)
+            .await?;
+
+            let travelers: Vec<Value> = traveler_rows.into_iter().map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "traveler_index": t.traveler_index,
+                    "ptc": t.ptc,
+                    "first_name": t.first_name,
+                    "last_name": t.last_name,
+                    "date_of_birth": t.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
+                    "gender": t.gender,
+                    "traveler_did": t.traveler_did,
+                    "metadata": t.metadata
+                })
+            }).collect();
+
             let order_json = serde_json::json!({
                 "id": row.id,
                 "customer_id": row.customer_id,
                 "customer_email": row.customer_email,
+                "contact_info": {
+                    "email": row.customer_email,
+                    "phone": row.contact_phone,
+                    "first_name": row.contact_first_name,
+                    "last_name": row.contact_last_name,
+                },
                 "offer_id": row.offer_id,
                 "airline_id": row.airline_id,
                 "status": row.status,
@@ -257,7 +343,9 @@ impl OrderRepository for StoreOrderRepository {
                 "payment_method": row.payment_method,
                 "payment_reference": row.payment_reference,
                 "customer_did": row.customer_did,
+                "expires_at": row.expires_at.map(|t| t.to_rfc3339()),
                 "items": items,
+                "travelers": travelers,
                 "fulfillment": fulfillment,
                 "created_at": row.created_at.map(|t| t.to_rfc3339()),
                 "updated_at": row.updated_at.map(|t| t.to_rfc3339())
