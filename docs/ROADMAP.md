@@ -14,6 +14,10 @@ This document outlines the high-level roadmap for evolving Altis Engine from a f
 - [ ] **Order Customization**:
     - Flesh out the `customize_order` endpoint to actually persist seat and meal selections.
     - Dynamically recalculate order totals and trigger unnecessary re-pricing.
+- [ ] **Real-time Ancillary Inventory (SSE)**:
+    - Implement `GET /v1/ancillaries/:flight_id/availability` for live inventory (Meals, Bags, Wi-Fi).
+    - Extend SSE `BookingContext` to push updates for limited-quantity items (e.g., "Last Bassinet available!").
+    - Handle concurrent selection race conditions.
 
 ## 2. Payments & Finance (Priority: High)
 *Focus: Real money handling and financial reconciliation.*
@@ -45,3 +49,12 @@ This document outlines the high-level roadmap for evolving Altis Engine from a f
         - Booking Confirmations (with PDF receipt).
         - Flight Status Updates.
         - Check-in Reminders.
+
+## 5. Backoffice & Admin (Priority: Low)
+*Focus: Internal tools for airline staff.*
+
+- [ ] **Product Catalog UI**:
+    - Admin dashboard to create/edit Ancillaries (Meals, Bags) and their base prices.
+    - specialized form for "Rich Media" uploads (images/descriptions for the storefront).
+- [ ] **Inventory Control**:
+    - Manual overrides for flight capacity and ancillary stock limits.
