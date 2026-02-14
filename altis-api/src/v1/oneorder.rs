@@ -38,6 +38,8 @@ pub async fn order_retrieve(
                 currency: "NUC".to_string(), // Default currency
             },
         }).collect(),
+        travelers: internal_order.travelers,
+        contact_info: internal_order.contact_info,
     };
 
     Ok(Json(OneOrderResponse { order: one_order }))

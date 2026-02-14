@@ -24,18 +24,22 @@ pub struct OrderResponse {
     pub id: Uuid,
     pub offer_id: Option<Uuid>,
     pub customer_id: String,
-    pub customer_email: Option<String>,
+    pub customer_email: Option<altis_shared::pii::Masked<String>>,
     pub customer_did: Option<String>,
     pub status: String,
     pub items: Vec<OrderItemResponse>,
+    pub travelers: Option<Vec<altis_core::iata::Traveler>>,
+    pub contact_info: Option<altis_core::iata::ContactInfo>,
     pub total_nuc: i32,
     pub currency: String,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemResponse {
     pub id: Uuid,
+    pub product_id: Option<Uuid>,
     pub product_type: String,
     pub name: String,
     pub price_nuc: i32,
@@ -146,7 +150,26 @@ pub async fn pay_order(
     let mut order: OrderResponse = serde_json::from_value(order_json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // 2. Process pay via Orchestrator
+    // 1.5 Verify order is not expired
+    if let Some(expires_at) = order.expires_at {
+        if chrono::Utc::now() > expires_at {
+            return Err(StatusCode::GONE);
+        }
+    }
+
+    // 1.5 Verify order is not expired
+    if let Some(expires_at) = order.expires_at {
+        if chrono::Utc::now() > expires_at {
+            return Err(StatusCode::GONE);
+        }
+    }
+
+    // 2. Lock-in: Transition to PAYMENT_PENDING
+    // This prevents the background cleanup worker from releasing inventory
+    state.order_repo.update_order_status(order_id, "PAYMENT_PENDING").await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 3. Process pay via Orchestrator
     let intent = altis_core::payment::PaymentIntent {
         id: format!("pi_{}", order_id.simple()),
         order_id,
@@ -165,6 +188,10 @@ pub async fn pay_order(
         })?;
 
     if payment_status != altis_core::payment::PaymentStatus::Succeeded {
+        // If it's still processing (async), we stay in PAYMENT_PENDING
+        if payment_status == altis_core::payment::PaymentStatus::Processing {
+             return Ok(Json(order));
+        }
         return Err(StatusCode::PAYMENT_REQUIRED);
     }
 
@@ -221,6 +248,13 @@ pub async fn initialize_payment_intent(
 
     let order: OrderResponse = serde_json::from_value(order_json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 1.5 Verify order is not expired
+    if let Some(expires_at) = order.expires_at {
+        if chrono::Utc::now() > expires_at {
+            return Err(StatusCode::GONE);
+        }
+    }
 
     let intent = state.payment_orchestrator.initialize_payment(
         order_id, 
@@ -289,15 +323,47 @@ pub async fn get_fulfillment(
 /// POST /v1/orders/:id/cancel
 /// Cancel an order
 pub async fn cancel_order(
-    State(_state): State<AppState>,
-    Path(_order_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Path(order_id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    // TODO: Implement order cancellation
-    // 1. Verify order can be cancelled (not already fulfilled)
-    // 2. Process refund if already paid
-    // 3. Update order status to CANCELLED
-    // 4. Release inventory
-    // 5. Send cancellation email
+    // 1. Get order to verify exists and check status
+    let order_json = state.order_repo.get_order(order_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let order: OrderResponse = serde_json::from_value(order_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if order.status == "CANCELLED" {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    // 2. Update order status to CANCELLED
+    state.order_repo.update_order_status(order_id, "CANCELLED").await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 3. Release inventory
+    for item in &order.items {
+        if item.product_type == "Flight" {
+            if let Some(product_id) = item.product_id {
+                let pid_str = product_id.to_string();
+                let current = state.redis.get_flight_availability(&pid_str).await
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0);
+                let _ = state.redis.set_flight_availability(&pid_str, current + 1).await;
+            }
+        }
+    }
+
+    // 4. Log Audit Change
+    let _ = state.order_repo.add_order_change(
+        order_id, 
+        "CANCELLED", 
+        Some(serde_json::json!({"status": order.status})), 
+        Some(serde_json::json!({"status": "CANCELLED"})), 
+        "CUSTOMER", 
+        Some("Order cancelled via API")
+    ).await;
     
     Ok(StatusCode::NO_CONTENT)
 }
@@ -407,6 +473,7 @@ pub async fn reshop_order(
 
         items_to_add.push(OrderItemResponse {
             id: Uuid::new_v4(),
+            product_id: Some(product_id),
             product_type: product["product_type"].as_str().unwrap_or("EXTRA").to_string(),
             name: product["name"].as_str().unwrap_or("Extra Product").to_string(),
             price_nuc: price,

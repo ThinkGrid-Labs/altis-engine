@@ -35,7 +35,7 @@ pub async fn handle_stripe_webhook(
 ) -> Result<StatusCode, StatusCode> {
     tracing::info!("Received webhook: {} for intent {}", payload.type_, payload.data.object.id);
 
-    if payload.type_ == "payment_intent.succeeded" {
+    if payload.type_ == "payment_intent.succeeded" || payload.type_ == "payment_intent.payment_failed" || payload.type_ == "payment_intent.canceled" {
         let intent_id = &payload.data.object.id;
         
         // 1. Process status update via orchestrator
@@ -48,6 +48,29 @@ pub async fn handle_stripe_webhook(
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             
             tracing::info!("Order {} marked as PAID via webhook", intent.order_id);
+        } else if intent.status == PaymentStatus::Failed || intent.status == PaymentStatus::Canceled {
+            // 2. Mark order as CANCELLED and release inventory
+            state.order_repo.update_order_status(intent.order_id, "CANCELLED").await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            // 3. Release inventory (Reuse cancellation logic)
+            if let Ok(Some(order_json)) = state.order_repo.get_order(intent.order_id).await {
+                if let Ok(order) = serde_json::from_value::<crate::orders::OrderResponse>(order_json) {
+                    for item in &order.items {
+                        if item.product_type == "Flight" {
+                            if let Some(product_id) = item.product_id {
+                                let pid_str = product_id.to_string();
+                                let current = state.redis.get_flight_availability(&pid_str).await
+                                    .unwrap_or(Some(0))
+                                    .unwrap_or(0);
+                                let _ = state.redis.set_flight_availability(&pid_str, current + 1).await;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            tracing::info!("Order {} marked as CANCELLED and inventory released via webhook due to payment {:?}", intent.order_id, intent.status);
         }
     }
 

@@ -58,6 +58,8 @@ pub struct OfferItemResponse {
 #[derive(Debug, Deserialize)]
 pub struct AcceptOfferRequest {
     pub customer_email: String,
+    pub travelers: Option<Vec<altis_core::iata::Traveler>>,
+    pub contact_info: Option<altis_core::iata::ContactInfo>,
 }
 
 // ============================================================================
@@ -217,6 +219,11 @@ pub async fn accept_offer(
     let offer: altis_offer::Offer = serde_json::from_value(offer_json.clone())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // 1.5 Verify offer is not expired
+    if offer.is_expired() {
+        return Err(StatusCode::GONE);
+    }
+
     // 2. Log Telemetry
     let _ = state.telemetry.log_offer_accepted(altis_shared::models::events::OfferAcceptedEvent {
         offer_id,
@@ -232,6 +239,34 @@ pub async fn accept_offer(
         (claims.sub.clone(), None)
     };
 
+    // Calculate expiration based on airline rules or global default
+    let airline_id = offer.airline_id.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?; 
+    let hold_seconds = if let Ok(Some(rule)) = state.catalog_repo.get_inventory_rule(airline_id, "FLIGHT").await {
+        rule["hold_duration_seconds"].as_u64().unwrap_or(state.business_rules.trip_hold_seconds)
+    } else {
+        state.business_rules.trip_hold_seconds
+    };
+
+    let expires_at = (chrono::Utc::now() + chrono::Duration::seconds(hold_seconds as i64)).to_rfc3339();
+
+    // 4. Reserve Inventory (Hard Hold)
+    for item in &offer.items {
+        if item.product_type == "Flight" {
+            if let Some(product_id) = item.product_id {
+                let pid_str = product_id.to_string();
+                match state.redis.decr_flight_availability(&pid_str).await {
+                    Ok(Some(remaining)) if remaining < 0 => {
+                        // Rollback: increment back (simple version for now)
+                        let _ = state.redis.set_flight_availability(&pid_str, 0).await;
+                        return Err(StatusCode::CONFLICT); // Seat just taken
+                    }
+                    Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+                    _ => {}
+                }
+            }
+        }
+    }
+
     let order_id = state.order_repo.create_order(&serde_json::json!({
         "customer_id": customer_id,
         "customer_email": req.customer_email,
@@ -240,6 +275,11 @@ pub async fn accept_offer(
         "status": "PROPOSED",
         "total_nuc": offer.total_nuc,
         "currency": offer.currency,
+        "contact_phone": req.contact_info.as_ref().and_then(|c| c.phone.clone()),
+        "contact_first_name": req.contact_info.as_ref().and_then(|c| c.first_name.clone()),
+        "contact_last_name": req.contact_info.as_ref().and_then(|c| c.last_name.clone()),
+        "travelers": req.travelers,
+        "expires_at": expires_at,
     })).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // 4. Add Order Items

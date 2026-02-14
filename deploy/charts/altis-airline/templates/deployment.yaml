@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "altis-airline.fullname" . }}
+  labels:
+    {{- include "altis-airline.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "altis-airline.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "altis-airline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ALTIS__DATABASE__URL
+              value: "postgres://{{ .Values.database.user }}:{{ .Values.database.password }}@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}?sslmode={{ .Values.database.sslmode }}"
+            - name: ALTIS__REDIS__URL
+              value: {{ .Values.redis.url | quote }}
+            - name: ALTIS__KAFKA__BROKERS
+              value: {{ .Values.kafka.brokers | quote }}
+            - name: ALTIS__AUTH__JWT_SECRET
+              value: {{ .Values.auth.jwtSecret | quote }}
+            - name: ALTIS__AUTH__JWT_EXPIRATION_SECONDS
+              value: {{ .Values.auth.jwtExpirationSeconds | quote }}
+            - name: ALTIS__SERVER__PORT
+              value: "8080"
+            - name: AIRLINE_ID
+              value: {{ .Values.airline.id | quote }}
+            - name: AIRLINE_CODE
+              value: {{ .Values.airline.code | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
