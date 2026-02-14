@@ -141,21 +141,22 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 1_PROPOSED: Offer Accepted\n(Inventory Held 30m)
-    1_PROPOSED --> 2_PAYMENT_PENDING: User starts checkout\n(Lock-in)
-    2_PAYMENT_PENDING --> 3_PAID: Payment Success
-    2_PAYMENT_PENDING --> 1_PROPOSED: Payment Failed\n(Release lock)
+    [*] --> PROPOSED: Offer Accepted\n(Inventory Held 30m)
+    PROPOSED --> PAYMENT_PENDING: User starts checkout\n(Lock-in)
+    PAYMENT_PENDING --> PAID: Payment Success
+    PAYMENT_PENDING --> PROPOSED: Payment Failed\n(Release lock)
     
-    3_PAID --> 4_FULFILLED: Ticket Issued
-    4_FULFILLED --> 5_ARCHIVED: Completed
+    PAID --> FULFILLED: Ticket Issued
+    FULFILLED --> ARCHIVED: Completed
     
-    1_PROPOSED --> 9_EXPIRED: 30min timeout\n(Releases Inventory)
-    1_PROPOSED --> 0_CANCELLED: User cancels
-    2_PAYMENT_PENDING --> 0_CANCELLED: Webhook: Payment Failed
+    PROPOSED --> EXPIRED: 30min timeout\n(Releases Inventory)
+    PROPOSED --> CANCELLED: User cancels
+    PAYMENT_PENDING --> CANCELLED: "Webhook: Payment Failed"
     
-    5_ARCHIVED --> [*]
-    9_EXPIRED --> [*]
-    0_CANCELLED --> [*]
+    ARCHIVED --> [*]
+    EXPIRED --> [*]
+    CANCELLED --> [*]
+```
 
 ### Payment Race Condition Protection
 
@@ -192,7 +193,7 @@ sequenceDiagram
         API-->>User: 200 OK
     end
 ```
-```
+
 
 ### Offer Lifecycle
 
