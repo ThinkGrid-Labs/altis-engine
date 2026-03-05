@@ -42,3 +42,8 @@ Thumbs.db
 !/docs/architecture/
 /docs/architecture/*
 !/docs/architecture/OVERVIEW.md
+# VitePress docs site
+!/docs/package.json
+!/docs/index.md
+!/docs/.vitepress/
+/docs/node_modules/
