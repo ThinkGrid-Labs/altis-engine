@@ -1,7 +1,16 @@
-# Altis Engine: The Future of Airline Retailing
+# Altis Engine — Rust IATA Offer/Order Engine for Modern Airline Retailing
 
-> **A Cloud-Native, Offer/Order Engine for Modern Airline Commerce.**  
-> Built in Rust for safety and performance. Natively aligned with the **IATA Modern Retailing** vision.
+> **A Cloud-Native, Offer/Order Engine for Modern Airline Commerce.**
+> Built in Rust for safety and performance. Natively aligned with the **IATA Modern Retailing** vision: NDC v21.3, ONE Order, continuous pricing, and IATA One Identity.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/ThinkGrid-Labs/altis-engine/ci.yml?branch=main)](https://github.com/ThinkGrid-Labs/altis-engine/actions)
+[![GitHub release](https://img.shields.io/github/v/release/ThinkGrid-Labs/altis-engine)](https://github.com/ThinkGrid-Labs/altis-engine/releases/latest)
+[![Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org)
+[![IATA NDC](https://img.shields.io/badge/IATA-NDC%20v21.3-blue)](https://www.iata.org/en/programs/airline-distribution/ndc/)
+[![IATA ONE Order](https://img.shields.io/badge/IATA-ONE%20Order-blue)](https://www.iata.org/en/programs/airline-distribution/one-order/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://thinkgrid-labs.github.io/altis-engine/)
+[![GitHub Stars](https://img.shields.io/github/stars/ThinkGrid-Labs/altis-engine?style=social)](https://github.com/ThinkGrid-Labs/altis-engine/stargazers)
 
 ---
 
